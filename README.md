@@ -53,6 +53,8 @@ cd android && ./gradlew assembleDebug
 - The five escalating zones → the **OCEAN** win screen
 - Distance scoring, corn combos, clean-run bonuses
 - Per-obstacle death flavor text (plus the "gone to live on a farm" gag)
+- A pool of background tracks — **a random one plays each time a run starts**
+  (mutable list in `www/js/music.js`; toggle with the 🔊 button or `M`)
 
 ---
 

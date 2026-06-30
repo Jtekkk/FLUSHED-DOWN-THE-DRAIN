@@ -103,6 +103,9 @@ window.FD = window.FD || {};
       this.state = STATE.PLAY;
       this.banner = { t: 2.6, name: Z.ZONES[0].name, sub: Z.ZONES[0].sub };
       FD.audio.click();
+      // fresh random background track for every run
+      const title = FD.music.playRandom();
+      if (title) this.toastMsg('♪ ' + title, '#9be8ff');
     }
 
     kill(cause) {
@@ -114,6 +117,7 @@ window.FD = window.FD || {};
       this.toast.t = 0;
       this.shake = 0.6;
       this.flash = 0.6;
+      FD.music.stop();
       FD.audio.death();
       this.particles.burst(this.player.x, this.player.y, 26, {
         speedMin: 60,
@@ -135,6 +139,7 @@ window.FD = window.FD || {};
       this.toast.t = 0;
       // big clean-run / finish bonus
       this.bonus += 500;
+      FD.music.stop();
       FD.audio.win();
       this.saveBest();
     }
@@ -147,8 +152,13 @@ window.FD = window.FD || {};
     }
 
     togglePause() {
-      if (this.state === STATE.PLAY) this.state = STATE.PAUSE;
-      else if (this.state === STATE.PAUSE) this.state = STATE.PLAY;
+      if (this.state === STATE.PLAY) {
+        this.state = STATE.PAUSE;
+        FD.music.pause();
+      } else if (this.state === STATE.PAUSE) {
+        this.state = STATE.PLAY;
+        FD.music.resume();
+      }
     }
 
     /* ------------------------------------------------------ event callbacks */
@@ -846,6 +856,7 @@ window.FD = window.FD || {};
     FD.togglePause = () => game.togglePause();
     FD.toggleMute = () => {
       FD.audio.setMuted(!FD.audio.muted);
+      FD.music.setMuted(FD.audio.muted);
       updateMuteBtn();
     };
 

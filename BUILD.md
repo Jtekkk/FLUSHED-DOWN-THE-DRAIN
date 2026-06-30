@@ -120,12 +120,14 @@ www/                 the game (HTML5 canvas, vanilla JS — no build step)
   index.html
   css/style.css
   js/util.js         helpers + particle system
-  js/audio.js        WebAudio synth (no asset files)
+  js/audio.js        WebAudio synth for sound effects (no asset files)
+  js/music.js        background-music pool (random track per run)
   js/input.js        one-button input (touch / mouse / keyboard)
   js/entities.js     Sir Reginald + obstacles + power-ups
   js/zones.js        the escalating zone / spawn tables
   js/game.js         engine: loop, state machine, spawn director, rendering
   assets/icon.png    app icon
+  assets/music/      background-music tracks (.mp3)
 electron/main.js     desktop wrapper
 tools/serve.js       zero-dep static dev server
 capacitor.config.json
@@ -133,6 +135,15 @@ android/             generated native Android project (committed)
 resources/icon.png   1024² icon source (re-generate native icons from this)
 .github/workflows/   CI that builds .exe + .apk
 ```
+
+### Background music
+
+Tracks live in `www/assets/music/` and the playable pool is the `TRACKS` array
+in [`www/js/music.js`](www/js/music.js). A random track is chosen every time a
+run starts (never repeating the previous one back-to-back) and loops until the
+run ends. To add or remove a song, drop/delete an `.mp3` in
+`www/assets/music/` and edit that array — then `npx cap copy android` to
+re-bundle it for Android. Music respects the global mute (🔊 / `M`).
 
 ### Regenerating app icons
 
