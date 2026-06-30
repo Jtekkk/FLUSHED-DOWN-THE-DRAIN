@@ -43,6 +43,49 @@ window.FD = window.FD || {};
     )})`;
   }
 
+  // localStorage can THROW (Brave/Firefox strict mode, blocked cookies, some
+  // file:// configs, sandboxed WebViews). A throw here used to abort boot and
+  // leave a blank screen, so every access is guarded.
+  function readBest() {
+    try {
+      return parseFloat(localStorage.getItem('fd_best') || '0') || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  function writeBest(v) {
+    try {
+      localStorage.setItem('fd_best', String(v));
+    } catch (e) {
+      /* storage unavailable — high score just won't persist */
+    }
+  }
+
+  // Turn a silent blank screen into a readable message. Better the player sees
+  // "something broke: <reason>" than an inexplicable black rectangle.
+  function showFatal(err) {
+    try {
+      const msg = (err && (err.stack || err.message)) || String(err);
+      // eslint-disable-next-line no-console
+      console.error('FLUSHED failed to start:', err);
+      let el = document.getElementById('splash');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'splash';
+        document.body.appendChild(el);
+      }
+      el.style.display = 'flex';
+      el.innerHTML =
+        '<div style="max-width:90%;text-align:center;color:#ffd23f;font:600 18px system-ui,sans-serif">' +
+        '🐟💥<br>Something broke while starting the game.<br>' +
+        '<div style="margin-top:10px;color:#bcd;font:13px/1.4 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">' +
+        String(msg).slice(0, 600) +
+        '</div></div>';
+    } catch (e) {
+      /* last resort: nothing more we can do */
+    }
+  }
+
   class Game {
     constructor(canvas) {
       this.canvas = canvas;
@@ -63,7 +106,7 @@ window.FD = window.FD || {};
       this.shake = 0;
       this.flash = 0; // red damage flash
       this.bg = Object.assign({}, Z.ZONES[0].palette);
-      this.best = parseFloat(localStorage.getItem('fd_best') || '0') || 0;
+      this.best = readBest();
       this.banner = { t: 0, name: '', sub: '' };
       this.toast = { t: 0, text: '', color: '#fff' };
       this.menuFishY = H * 0.42;
@@ -147,7 +190,7 @@ window.FD = window.FD || {};
     saveBest() {
       if (this.meters > this.best) {
         this.best = Math.floor(this.meters);
-        localStorage.setItem('fd_best', String(this.best));
+        writeBest(this.best);
       }
     }
 
@@ -848,6 +891,7 @@ window.FD = window.FD || {};
   /* --------------------------------------------------------- boot + loop */
   function boot() {
     const canvas = document.getElementById('game');
+    if (!canvas || !canvas.getContext) throw new Error('Canvas not supported by this browser');
     const game = new Game(canvas);
     FD.game = game;
     FD.input.init(canvas);
@@ -886,25 +930,40 @@ window.FD = window.FD || {};
 
     let last = performance.now();
     let acc = 0;
+    let loopErrors = 0;
     const STEP = 1 / 120;
     function frame(now) {
-      let dt = (now - last) / 1000;
-      last = now;
-      if (dt > 0.25) dt = 0.25; // tab was backgrounded; don't spiral
+      // The whole frame is guarded: one stray exception must never kill the
+      // render loop and freeze the game. We log, count, and keep going; only a
+      // persistent storm of errors surfaces a message.
+      try {
+        let dt = (now - last) / 1000;
+        last = now;
+        if (dt > 0.25) dt = 0.25; // tab was backgrounded; don't spiral
 
-      // edge-triggered presses for menu/restart
-      if (FD.input.consumePress()) game.handlePress();
+        if (FD.input.consumePress()) game.handlePress();
 
-      acc += dt;
-      let steps = 0;
-      while (acc >= STEP && steps < 6) {
-        game.update(STEP);
-        acc -= STEP;
-        steps++;
+        acc += dt;
+        let steps = 0;
+        while (acc >= STEP && steps < 6) {
+          game.update(STEP);
+          acc -= STEP;
+          steps++;
+        }
+        if (steps === 6) acc = 0;
+
+        game.render();
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('frame error:', e);
+        if (++loopErrors === 1 || loopErrors % 240 === 0) {
+          /* keep the noise down but keep a breadcrumb */
+        }
+        if (loopErrors > 600) {
+          showFatal(e);
+          return; // give up only after ~10s of solid failure
+        }
       }
-      if (steps === 6) acc = 0;
-
-      game.render();
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -914,6 +973,22 @@ window.FD = window.FD || {};
     if (splash) splash.style.display = 'none';
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
+  function start() {
+    // A failure anywhere in setup now shows a readable error instead of a
+    // blank screen, and uncaught errors are caught as a final safety net.
+    window.addEventListener('error', (e) => {
+      if (!FD.game) showFatal(e.error || e.message);
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      if (!FD.game) showFatal(e.reason);
+    });
+    try {
+      boot();
+    } catch (e) {
+      showFatal(e);
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
 })(window.FD);
