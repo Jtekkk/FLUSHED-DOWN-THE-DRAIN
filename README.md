@@ -1,6 +1,25 @@
 # FLUSHED-DOWN-THE-DRAIN
 PLAY THIS FAST PACED GAME AS A GOLDFISH FLUSHED DOWN THE TOILET AND THROUGH THE SEWER PIPES DOODGING POOP AND TOIKET PAPER BLOBS EATING PIECES OF CORN FOR HEALTH MAKE YOUR WAY TO THE OCEAN TO WIN!
 
+## ▶ Play it
+The game is a single self-contained file — no build step, no dependencies.
+
+- **Open `index.html`** in any modern browser (double-click it, or serve the folder and visit it).
+- **Controls:** one button. Hold **Space** / click / tap to swim **up**, release to **sink**. That's the whole game.
+- Works on desktop and mobile (touch).
+
+## How health works (the twist)
+Your health bar has **two layers**:
+- 🟩 **Clean (green)** — polluted water constantly poisons it. **Corn refills it.** Run it dry and Reginald starves.
+- 🟨 **Filth reserve (yellow)** — a hard reserve that **only ever goes down**, drained by hits and wall scrapes, and **never refills**. When it hits zero, you're done.
+
+So corn buys you time, but every hit is permanent damage you can't undo. Damage is the real clock — survive clean.
+
+**Corn combo:** eat kernels back-to-back without taking damage to stack a multiplier (up to x5) for big score.
+
+## Credits
+First playable build co-designed with **Zorg** (via the Venice.ai API) — physics tuning, the two-layer clean/filth health system, the corn-combo numbers, and the death-screen one-liners.
+
 FLUSHED: Down the Drain
 Genre: Fast-paced auto-swimmer / endless-ish gauntlet
 Vibe: Gross-out arcade. Think Flappy Bird met a porta-potty and they had a beautiful, disgusting baby.

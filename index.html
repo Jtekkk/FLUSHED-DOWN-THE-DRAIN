@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>FLUSHED: Down the Drain</title>
+<style>
+  :root { --ink:#0c1a17; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; background: #07110f; overflow: hidden;
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif; color: #eafff6;
+    touch-action: none;
+  }
+  #wrap {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 20%, #14302a, #060d0c 70%);
+  }
+  #game {
+    display: block; width: min(100vw, 177.7vh); height: min(56.25vw, 100vh);
+    background: #08110f; border-radius: 10px; box-shadow: 0 10px 60px #000a, 0 0 0 2px #1c3b34;
+    image-rendering: optimizeQuality;
+  }
+  #hint {
+    position: fixed; bottom: 8px; left: 0; right: 0; text-align: center;
+    font-size: 12px; color: #6fae9d; pointer-events: none; opacity: .8;
+  }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="960" height="540"></canvas></div>
+<div id="hint">Hold SPACE / click / tap to swim up &nbsp;•&nbsp; release to sink</div>
+<script>
+"use strict";
+/* =========================================================================
+   FLUSHED: Down the Drain
+   One-button gross-out auto-swimmer. Built with vanilla canvas, no deps.
+   Design collaboration with "Zorg" (Venice.ai): physics tuning, the
+   two-layer clean/filth health system, corn combo, death lines & taglines.
+   ========================================================================= */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const W = canvas.width, H = canvas.height;
+
+// ---- Playfield (pipe interior). Walls top & bottom; scraping = chip damage.
+const WALL = 64;                 // wall band thickness
+const TOP = WALL, BOT = H - WALL; // y bounds of swimmable water
+const FISH_X = 230;              // fish stays at fixed x; world scrolls past
+
+// ---- Physics (Zorg's numbers) -------------------------------------------
+const GRAVITY = 400;     // px/s^2 downward pull (sink)
+const THRUST  = 800;     // px/s^2 upward while held
+const VMAX    = 320;     // clamp vertical speed
+const DRAG    = 0.92;    // per-frame-ish damping, applied scaled by dt
+
+// ---- Health: two stacked layers (Zorg's twist) --------------------------
+//  CLEAN (green): poison drains it over time; corn refills it. 0 => starved.
+//  FILTH (yellow): a hard reserve. ONLY ever drops, on damage. 0 => dead.
+const CLEAN_MAX = 60, FILTH_MAX = 40;
+const POISON = 4.2;      // clean drained per second by polluted water
+
+// ---- Distance / win ------------------------------------------------------
+const PX_PER_M = 22;     // pixels of scroll per "meter"
+const OCEAN_M = 720;     // reach this to win
+
+// ---- Zones (escalating). [startMeters, name, tagline] -------------------
+const ZONES = [
+  [0,   "The Bowl Drop",     "From luxury to literal crap"],
+  [60,  "Residential Pipes", "Where dinner becomes disaster"],
+  [180, "The Main Line",     "Sewage expressway to nowhere good"],
+  [360, "Treatment Plant",   "Nature's blender on parade"],
+  [560, "The Outflow",       "Almost there, kinda clean-ish"],
+  [OCEAN_M, "Ocean",         "Freedom smells like salt... and hope"],
+];
+
+const DEATH_LINES = {
+  poop:     "Reginald's last thought: 'This isn't koi food...'",
+  tp:       "The cotton avalanche claimed another swimmer.",
+  hairclog: "A barber's nightmare becomes a goldfish's tomb.",
+  grate:    "Some dreams are literally crushed.",
+  rat:      "The sewer's apex predator strikes again.",
+  wall:     "Even fish can't phase through porcelain.",
+  starved:  "Poisoned by the water he was forced to breathe.",
+};
+const WIN_LINE = "Reginald breaches the surface, victorious and slightly traumatized!";
+
+// =========================================================================
+//  State
+// =========================================================================
+const STATE = { TITLE:0, PLAY:1, DEAD:2, WIN:3 };
+let state = STATE.TITLE;
+
+const fish = { y: H/2, vy: 0, tilt: 0, wag: 0, flash: 0 };
+let clean, filth, dist, scroll, elapsed, spawnT, score, combo, comboT, bestCombo;
+let shield, bubble, hot, cleanZoneT;
+let obstacles, pickups, particles;
+let shake = 0, zoneIdx = 0, zoneBanner = 0, lastDeath = "poop", started = false;
+let best = +(localStorage.getItem("flushed_best") || 0);
+
+function reset() {
+  fish.y = H/2; fish.vy = 0; fish.tilt = 0; fish.wag = 0; fish.flash = 0;
+  clean = CLEAN_MAX; filth = FILTH_MAX;
+  dist = 0; scroll = 120; elapsed = 0; spawnT = 1.2;
+  score = 0; combo = 0; comboT = 0; bestCombo = 0;
+  shield = 0; bubble = 0; hot = 0; cleanZoneT = 0;
+  obstacles = []; pickups = []; particles = [];
+  shake = 0; zoneIdx = 0; zoneBanner = 0;
+}
+
+// =========================================================================
+//  Input — one button: hold = swim up
+// =========================================================================
+let holding = false;
+function press() {
+  if (state === STATE.TITLE) { reset(); state = STATE.PLAY; started = true; beep(440,0.05); }
+  else if (state === STATE.DEAD || state === STATE.WIN) {
+    if (input.cooldown <= 0) { reset(); state = STATE.PLAY; }
+  }
+  holding = true;
+}
+function release() { holding = false; }
+const input = { cooldown: 0 };
+
+addEventListener("keydown", e => {
+  if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); press(); }
+});
+addEventListener("keyup", e => { if (e.code === "Space" || e.code === "ArrowUp") release(); });
+canvas.addEventListener("mousedown", e => { e.preventDefault(); press(); });
+addEventListener("mouseup", release);
+canvas.addEventListener("touchstart", e => { e.preventDefault(); press(); }, { passive:false });
+addEventListener("touchend", e => { e.preventDefault(); release(); }, { passive:false });
+
+// =========================================================================
+//  Tiny WebAudio for juice (no assets)
+// =========================================================================
+let actx = null;
+function beep(freq, dur, type="square", vol=0.05) {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.value = vol; o.connect(g); g.connect(actx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+    o.stop(actx.currentTime + dur);
+  } catch (e) {}
+}
+
+// =========================================================================
+//  Spawning
+// =========================================================================
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = arr => arr[(Math.random() * arr.length) | 0];
+function gapY(h) { return rand(TOP + h/2 + 14, BOT - h/2 - 14); }
+
+// obstacle weights per zone index
+const ZONE_OBSTACLES = [
+  ["floater"],                                        // Bowl Drop
+  ["floater","floater","tp"],                         // Residential
+  ["floater","tp","grate","rat"],                     // Main Line
+  ["tp","grate","hairclog","hairclog","rat","floater"],// Treatment Plant
+  ["floater","grate"],                                // Outflow (sprint, lighter)
+];
+
+function spawnObstacle() {
+  const z = Math.min(zoneIdx, ZONE_OBSTACLES.length - 1);
+  const kind = pick(ZONE_OBSTACLES[z]);
+  if (kind === "floater") {
+    const r = rand(20, 34);
+    obstacles.push({ kind, x: W + 60, y: gapY(r*2), r, dmg: 14, wob: rand(0,6.28) });
+  } else if (kind === "tp") {
+    obstacles.push({ kind, x: W + 80, y: gapY(70), r: 26, grow: 0, dmg: 18 });
+  } else if (kind === "hairclog") {
+    obstacles.push({ kind, x: W + 60, gap: rand(TOP + 110, BOT - 110), gapH: rand(115,140), w: 26, dmg: 40 });
+  } else if (kind === "grate") {
+    obstacles.push({ kind, x: W + 50, gap: rand(TOP + 95, BOT - 95), gapH: rand(105,125), w: 20, dmg: 26 });
+  } else if (kind === "rat") {
+    obstacles.push({ kind, x: W + 40, y: rand(TOP+30, BOT-30), r: 18, dmg: 22, vx: -rand(70,120), wig: rand(0,6.28) });
+  }
+}
+
+function spawnPickup() {
+  const r = Math.random();
+  let kind = "corn";
+  if (r > 0.92) kind = "soap";
+  else if (r > 0.84) kind = "hotsauce";
+  else if (r > 0.74) kind = "antacid";
+  if (kind === "corn") {
+    // clusters of corn => combo opportunities
+    const n = 1 + ((Math.random()*3)|0);
+    const baseY = gapY(40);
+    for (let i = 0; i < n; i++)
+      pickups.push({ kind, x: W + 40 + i*46, y: baseY + Math.sin(i)*22, r: 10, t: rand(0,6.28) });
+  } else {
+    pickups.push({ kind, x: W + 40, y: gapY(40), r: 13, t: 0 });
+  }
+}
+
+// =========================================================================
+//  Update
+// =========================================================================
+function update(dt) {
+  if (input.cooldown > 0) input.cooldown -= dt;
+  if (zoneBanner > 0) zoneBanner -= dt;
+  if (state !== STATE.PLAY) { stepParticles(dt); return; }
+
+  elapsed += dt;
+
+  // --- timers for power-ups
+  if (shield > 0) shield -= dt;
+  if (bubble > 0) bubble -= dt;
+  if (hot > 0) hot -= dt;
+
+  // --- scroll speed: 120 -> ~300 over 60s, +zone bump, +hot sauce
+  const ramp = Math.min(elapsed / 60, 1);
+  let baseSpeed = 120 + ramp * 160 + zoneIdx * 8;
+  if (zoneIdx === 4) baseSpeed += 90;          // Outflow = sprint
+  scroll = baseSpeed * (hot > 0 ? 1.7 : 1) * (bubble > 0 ? 1.25 : 1);
+
+  // --- distance & zone
+  dist += scroll * dt / PX_PER_M;
+  let zi = 0;
+  for (let i = 0; i < ZONES.length; i++) if (dist >= ZONES[i][0]) zi = i;
+  if (zi !== zoneIdx) { zoneIdx = zi; zoneBanner = 2.6; beep(660,0.08,"sine"); }
+  if (dist >= OCEAN_M) { win(); return; }
+
+  // --- fish physics (Zorg's tuning) -------------------------------------
+  const slip = bubble > 0 ? 0.45 : 1;          // soap bubble = slippery control
+  fish.vy += (holding ? -THRUST : 0) * slip * dt;
+  fish.vy += GRAVITY * dt;
+  fish.vy *= Math.pow(DRAG, dt * 60);
+  fish.vy = Math.max(-VMAX, Math.min(VMAX, fish.vy));
+  fish.y += fish.vy * dt;
+  fish.tilt = Math.max(-0.5, Math.min(0.6, fish.vy / 360));
+  fish.wag += dt * (holding ? 22 : 12);
+  if (fish.flash > 0) fish.flash -= dt;
+
+  // wall scrape = chip damage, kill vertical momentum (no floaty bounce)
+  if (fish.y < TOP + 14) { fish.y = TOP + 14; if (fish.vy < 0) fish.vy = 0; scrape(dt); }
+  if (fish.y > BOT - 14) { fish.y = BOT - 14; if (fish.vy > 0) fish.vy = 0; scrape(dt); }
+
+  // --- poison drains clean; clean 0 => starved death
+  const inOutflow = zoneIdx >= 4;
+  clean -= POISON * (inOutflow ? 0.5 : 1) * dt;   // water gets cleaner near the sea
+  if (clean <= 0) { clean = 0; die("starved"); return; }
+
+  // --- combo timer decay
+  if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
+
+  // --- spawning: interval 1.6s -> 0.7s with elapsed, lighter in Outflow
+  const interval = Math.max(0.7, 1.6 - elapsed * 0.014) * (zoneIdx === 4 ? 1.5 : 1);
+  spawnT -= dt;
+  if (spawnT <= 0 && zoneIdx < 5) {
+    spawnT = interval * rand(0.85, 1.25);
+    spawnObstacle();
+    if (Math.random() < 0.55) spawnPickup();
+  }
+
+  moveEntities(dt);
+  stepParticles(dt);
+
+  if (shake > 0) shake = Math.max(0, shake - dt * 40);
+}
+
+function scrape(dt) {
+  filth -= 5 * dt;
+  if ((elapsed * 10 | 0) % 2 === 0) addBubbles(FISH_X, fish.y, 1, "#cdeee2");
+  if (filth <= 0) { filth = 0; die("wall"); }
+}
+
+function moveEntities(dt) {
+  const fr = bubble > 0 ? 26 : 16;  // fish collision radius (bubble is bigger but invincible)
+
+  for (const o of obstacles) {
+    o.x -= scroll * dt;
+    if (o.kind === "rat") {
+      o.x += o.vx * dt;                          // rats chase faster than scroll
+      o.wig += dt * 8;
+      o.y += Math.sign(fish.y - o.y) * 40 * dt + Math.sin(o.wig) * 0.6;
+    }
+    if (o.kind === "tp") { o.grow = Math.min(1, o.grow + dt * (o.x < FISH_X + 320 ? 1.4 : 0)); }
+    if (o.kind === "floater") o.wob += dt * 2;
+
+    if (!o.hit && hitObstacle(o, fr)) {
+      o.hit = true;
+      damage(o.dmg, o.kind);
+    }
+  }
+  obstacles = obstacles.filter(o => o.x > -120 && !o.gone);
+
+  for (const p of pickups) {
+    p.x -= scroll * dt; p.t += dt * 4;
+    const dx = p.x - FISH_X, dy = p.y - fish.y;
+    if (!p.got && dx*dx + dy*dy < (p.r + fr) * (p.r + fr)) { p.got = true; collect(p); }
+  }
+  pickups = pickups.filter(p => p.x > -60 && !p.got);
+}
+
+function hitObstacle(o, fr) {
+  const dx = o.x - FISH_X;
+  if (o.kind === "hairclog" || o.kind === "grate") {
+    if (Math.abs(dx) > o.w/2 + fr) return false;             // not aligned horizontally
+    const inGap = fish.y > o.gap - o.gapH/2 + 6 && fish.y < o.gap + o.gapH/2 - 6;
+    return !inGap;                                            // hit the net, missed the hole
+  }
+  const r = o.kind === "tp" ? o.r * (1 + o.grow * 0.9) : o.r;
+  const dy = o.y - fish.y;
+  return dx*dx + dy*dy < (r + fr) * (r + fr);
+}
+
+function damage(amount, kind) {
+  if (bubble > 0) { spark(FISH_X, fish.y, "#bfefff"); beep(900,0.04,"sine"); return; }   // invincible
+  if (shield > 0) { shield = 0; spark(FISH_X, fish.y, "#9cf"); beep(300,0.12,"sawtooth"); shake = 8; return; }
+  filth -= amount;
+  fish.flash = 0.4; shake = Math.min(16, 6 + amount * 0.3);
+  combo = 0; comboT = 0;
+  beep(140, 0.18, "sawtooth", 0.07);
+  spark(FISH_X, fish.y, "#7a4a1f");
+  // knockback for big hits
+  fish.vy += (fish.y < (TOP+BOT)/2 ? 1 : -1) * 60;
+  if (filth <= 0) { filth = 0; die(kind); }
+}
+
+function collect(p) {
+  if (p.kind === "corn") {
+    clean = Math.min(CLEAN_MAX, clean + 16);
+    // combo: kernels within 0.8s window, up to 5x
+    if (comboT > 0) combo = Math.min(5, combo + 1); else combo = 1;
+    comboT = 0.8 + 0.3 * Math.min(combo, 4);
+    bestCombo = Math.max(bestCombo, combo);
+    score += Math.round(100 * combo);
+    spark(p.x, p.y, "#ffd84a"); beep(660 + combo*80, 0.06, "square");
+  } else if (p.kind === "antacid") {
+    shield = 9999; spark(p.x, p.y, "#bfe9ff"); beep(520,0.1,"sine");
+  } else if (p.kind === "soap") {
+    bubble = 4.0; spark(p.x, p.y, "#cdf3ff"); beep(740,0.12,"sine");
+  } else if (p.kind === "hotsauce") {
+    hot = 3.0; spark(p.x, p.y, "#ff5530"); beep(420,0.12,"sawtooth");
+  }
+}
+
+function die(kind) {
+  if (state !== STATE.PLAY) return;
+  lastDeath = kind; state = STATE.DEAD; input.cooldown = 0.8;
+  shake = 16; beep(110, 0.5, "sawtooth", 0.08);
+  for (let i = 0; i < 26; i++) spark(FISH_X, fish.y, "#7a4a1f");
+  finalize();
+}
+function win() {
+  state = STATE.WIN; input.cooldown = 0.8;
+  beep(523,0.12,"sine"); beep(659,0.12,"sine"); beep(784,0.2,"sine");
+  finalize();
+}
+function finalize() {
+  const total = Math.round(dist) * 10 + score + bestCombo * 250;
+  if (total > best) { best = total; localStorage.setItem("flushed_best", best); }
+  lastScore = total;
+}
+let lastScore = 0;
+
+// =========================================================================
+//  Particles
+// =========================================================================
+function addBubbles(x, y, n, col) {
+  for (let i = 0; i < n; i++)
+    particles.push({ x: x + rand(-6,6), y: y + rand(-6,6), vx: rand(-30,-90), vy: rand(-20,20),
+                     r: rand(2,5), life: rand(0.4,0.9), col: col || "#bfe8db" });
+}
+function spark(x, y, col) {
+  for (let i = 0; i < 10; i++) {
+    const a = rand(0, 6.28), s = rand(40, 180);
+    particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, r: rand(2,4), life: rand(0.3,0.7), col });
+  }
+}
+function stepParticles(dt) {
+  if (state === STATE.PLAY && Math.random() < 0.5) addBubbles(FISH_X - 8, fish.y, 1);
+  for (const p of particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt; p.life -= dt;
+    if (state === STATE.PLAY) p.x -= scroll * dt * 0.3;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+// =========================================================================
+//  Rendering
+// =========================================================================
+function draw() {
+  ctx.save();
+  if (shake > 0) ctx.translate(rand(-shake,shake)*0.4, rand(-shake,shake)*0.4);
+
+  drawBackground();
+  drawWalls();
+  for (const o of obstacles) drawObstacle(o);
+  for (const p of pickups) drawPickup(p);
+  drawParticles();
+  if (state === STATE.PLAY || state === STATE.DEAD) drawFish();
+
+  ctx.restore();
+
+  drawHUD();
+  if (zoneBanner > 0 && state === STATE.PLAY) drawZoneBanner();
+  if (state === STATE.TITLE) drawTitle();
+  if (state === STATE.DEAD) drawDead();
+  if (state === STATE.WIN) drawWin();
+}
+
+function zoneTint() {
+  return ["#23433a","#3a3322","#2e2417","#241a12","#16364a","#0d5b86"][Math.min(zoneIdx,5)];
+}
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  const base = zoneTint();
+  g.addColorStop(0, shade(base, 1.25)); g.addColorStop(0.5, base); g.addColorStop(1, shade(base, 0.6));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // drifting murk streaks
+  ctx.globalAlpha = 0.10; ctx.fillStyle = "#000";
+  const off = (elapsed * scroll) % 120;
+  for (let x = -off; x < W; x += 120) ctx.fillRect(x, 0, 46, H);
+  ctx.globalAlpha = 1;
+}
+function drawWalls() {
+  const wallCol = shade(zoneTint(), 0.45);
+  ctx.fillStyle = wallCol;
+  ctx.fillRect(0, 0, W, TOP); ctx.fillRect(0, BOT, W, H - BOT);
+  // grime ridges that scroll
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  const off = (elapsed * scroll) % 80;
+  for (let x = -off; x < W; x += 80) {
+    ctx.fillRect(x, TOP - 10, 40, 10);
+    ctx.fillRect(x + 20, BOT, 40, 10);
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.06)";
+  ctx.fillRect(0, TOP - 3, W, 3); ctx.fillRect(0, BOT, W, 3);
+}
+
+function drawObstacle(o) {
+  ctx.save();
+  if (o.kind === "floater") {
+    ctx.translate(o.x, o.y + Math.sin(o.wob) * 4);
+    poopBlob(0, 0, o.r);
+  } else if (o.kind === "tp") {
+    const r = o.r * (1 + o.grow * 0.9);
+    ctx.translate(o.x, o.y);
+    ctx.fillStyle = "rgba(245,245,235,0.92)";
+    for (let i = 0; i < 7; i++) {
+      const a = i/7 * 6.28; ctx.beginPath();
+      ctx.arc(Math.cos(a)*r*0.55, Math.sin(a)*r*0.55, r*0.55, 0, 6.28); ctx.fill();
+    }
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(0,0,r*0.6,0,6.28); ctx.fill();
+  } else if (o.kind === "hairclog" || o.kind === "grate") {
+    drawBarrier(o);
+  } else if (o.kind === "rat") {
+    drawRat(o);
+  }
+  ctx.restore();
+}
+
+function poopBlob(x, y, r) {
+  ctx.fillStyle = "#6b3f1c";
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r*0.8, 0, 0, 6.28); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x - r*0.5, y - r*0.2, r*0.5, r*0.45, 0, 0, 6.28); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + r*0.5, y - r*0.1, r*0.55, r*0.5, 0, 0, 6.28); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.beginPath(); ctx.ellipse(x, y+r*0.25, r*0.8, r*0.4, 0, 0, 6.28); ctx.fill();
+  // shine
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  ctx.beginPath(); ctx.ellipse(x - r*0.3, y - r*0.35, r*0.25, r*0.15, 0, 0, 6.28); ctx.fill();
+}
+
+function drawBarrier(o) {
+  const hair = o.kind === "hairclog";
+  ctx.fillStyle = hair ? "#1c140e" : "#555a5e";
+  const topH = (o.gap - o.gapH/2) - TOP, botY = o.gap + o.gapH/2;
+  // upper + lower slabs leaving the gap
+  if (hair) {
+    drawHair(o.x, TOP, o.w, topH);
+    drawHair(o.x, botY, o.w, BOT - botY);
+  } else {
+    for (const seg of [[TOP, topH], [botY, BOT - botY]]) {
+      ctx.fillStyle = "#5a6166";
+      ctx.fillRect(o.x - o.w/2, seg[0], o.w, seg[1]);
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      for (let y = seg[0]; y < seg[0] + seg[1]; y += 16) ctx.fillRect(o.x - o.w/2, y, o.w, 4);
+      ctx.fillStyle = "rgba(255,255,255,0.12)";
+      ctx.fillRect(o.x - o.w/2, seg[0], 3, seg[1]);
+    }
+  }
+}
+function drawHair(x, y, w, h) {
+  ctx.fillStyle = "#1c140e"; ctx.fillRect(x - w/2, y, w, h);
+  ctx.strokeStyle = "rgba(20,12,8,0.9)"; ctx.lineWidth = 2;
+  for (let i = 0; i < h; i += 7) {
+    ctx.beginPath(); ctx.moveTo(x - w/2, y + i);
+    ctx.bezierCurveTo(x - w*1.4, y + i + 6, x + w*1.4, y + i - 6, x + w/2, y + i + 3);
+    ctx.stroke();
+  }
+}
+function drawRat(o) {
+  ctx.translate(o.x, o.y);
+  ctx.fillStyle = "#6d6b72";
+  ctx.beginPath(); ctx.ellipse(0, 0, o.r*1.3, o.r, 0, 0, 6.28); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-o.r*1.1, -o.r*0.2, o.r*0.7, o.r*0.6, 0, 0, 6.28); ctx.fill(); // head
+  ctx.fillStyle = "#d88"; ctx.beginPath(); ctx.arc(-o.r*0.4, -o.r*0.9, o.r*0.4, 0, 6.28); ctx.fill(); // ear
+  ctx.fillStyle = "#200"; ctx.beginPath(); ctx.arc(-o.r*1.4, -o.r*0.3, 2.5, 0, 6.28); ctx.fill();
+  ctx.strokeStyle = "#b88"; ctx.lineWidth = 3; ctx.beginPath();
+  ctx.moveTo(o.r*1.1, 0); ctx.quadraticCurveTo(o.r*2.2, Math.sin(o.wig)*8, o.r*2.6, 4); ctx.stroke();
+}
+
+function drawPickup(p) {
+  ctx.save(); ctx.translate(p.x, p.y + Math.sin(p.t) * 3);
+  if (p.kind === "corn") {
+    ctx.fillStyle = "#ffd23f";
+    ctx.beginPath(); ctx.ellipse(0, 0, 8, 11, 0, 0, 6.28); ctx.fill();
+    ctx.fillStyle = "rgba(180,120,0,0.5)";
+    for (let i=-1;i<=1;i++) for(let j=-1;j<=1;j++){ ctx.beginPath(); ctx.arc(i*4, j*5, 1.6, 0, 6.28); ctx.fill(); }
+    ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(-2,-4,2,0,6.28); ctx.fill();
+  } else {
+    const cols = { antacid:"#dff3ff", soap:"#bfeaff", hotsauce:"#ff4a2a" };
+    ctx.fillStyle = cols[p.kind];
+    glowDisc(0, 0, p.r, cols[p.kind]);
+    ctx.fillStyle = "#0a1a16"; ctx.font = "bold 12px Trebuchet MS"; ctx.textAlign = "center";
+    ctx.fillText(p.kind === "antacid" ? "+" : p.kind === "soap" ? "O" : "!", 0, 4);
+  }
+  ctx.restore();
+}
+function glowDisc(x, y, r, col) {
+  const g = ctx.createRadialGradient(x, y, 1, x, y, r*1.8);
+  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r*1.8, 0, 6.28); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.28); ctx.fill();
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 1.6));
+    ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.28); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFish() {
+  ctx.save();
+  ctx.translate(FISH_X, fish.y);
+  ctx.rotate(fish.tilt);
+  if (bubble > 0) {                                  // soap bubble shell
+    ctx.strokeStyle = "rgba(190,235,255,0.8)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 28, 0, 6.28); ctx.stroke();
+    ctx.fillStyle = "rgba(190,235,255,0.12)"; ctx.fill();
+  }
+  if (shield > 0) {
+    ctx.strokeStyle = "rgba(150,210,255,0.7)"; ctx.lineWidth = 2;
+    ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(0,0,24,0,6.28); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const flash = fish.flash > 0 && (fish.flash * 20 | 0) % 2 === 0;
+  const body = flash ? "#ffffff" : "#ff8a1e";
+  // tail
+  const tw = Math.sin(fish.wag) * 6;
+  ctx.fillStyle = flash ? "#fff" : "#ff6a00";
+  ctx.beginPath(); ctx.moveTo(-12, 0);
+  ctx.lineTo(-26, -10 + tw); ctx.lineTo(-22, 0); ctx.lineTo(-26, 10 + tw); ctx.closePath(); ctx.fill();
+  // body
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 16, 11, 0, 0, 6.28); ctx.fill();
+  // top fin
+  ctx.fillStyle = flash ? "#fff" : "#ff6a00";
+  ctx.beginPath(); ctx.moveTo(0,-9); ctx.quadraticCurveTo(6,-18,12,-6); ctx.closePath(); ctx.fill();
+  // eye
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(8, -3, 4, 0, 6.28); ctx.fill();
+  ctx.fillStyle = "#101010"; ctx.beginPath(); ctx.arc(9.5, -3, 2, 0, 6.28); ctx.fill();
+  // tiny crown — he IS Sir Reginald Bubbles III
+  ctx.fillStyle = "#ffd23f";
+  ctx.beginPath(); ctx.moveTo(2,-11); ctx.lineTo(4,-16); ctx.lineTo(6,-12);
+  ctx.lineTo(8,-16); ctx.lineTo(10,-12); ctx.lineTo(12,-16); ctx.lineTo(13,-10); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// =========================================================================
+//  HUD & screens
+// =========================================================================
+function bar(x, y, w, h, frac, col, bg) {
+  ctx.fillStyle = bg || "rgba(0,0,0,0.5)"; roundRect(x, y, w, h, 5); ctx.fill();
+  ctx.fillStyle = col; roundRect(x+2, y+2, Math.max(0,(w-4)*frac), h-4, 4); ctx.fill();
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function drawHUD() {
+  if (state === STATE.TITLE) return;
+  // health: green CLEAN + yellow FILTH side by side
+  ctx.font = "bold 12px Trebuchet MS"; ctx.textAlign = "left";
+  ctx.fillStyle = "#cfeee2"; ctx.fillText("HEALTH", 16, 22);
+  bar(74, 12, 150, 14, clean / CLEAN_MAX, "#43e08a");
+  bar(230, 12, 110, 14, filth / FILTH_MAX, "#ffce3a");
+  ctx.fillStyle = "rgba(255,255,255,0.55)"; ctx.font = "10px Trebuchet MS";
+  ctx.fillText("clean", 74, 36); ctx.fillText("filth (reserve)", 230, 36);
+
+  // distance + zone
+  ctx.textAlign = "right"; ctx.font = "bold 20px Trebuchet MS"; ctx.fillStyle = "#eafff6";
+  ctx.fillText(Math.round(dist) + " m", W - 16, 26);
+  ctx.font = "12px Trebuchet MS"; ctx.fillStyle = "#9fd8c8";
+  ctx.fillText(ZONES[zoneIdx][1], W - 16, 44);
+
+  // distance-to-ocean track
+  const tw = 200, tx = W - 16 - tw, ty = 54;
+  ctx.fillStyle = "rgba(0,0,0,0.4)"; roundRect(tx, ty, tw, 6, 3); ctx.fill();
+  ctx.fillStyle = "#5cc8ff"; roundRect(tx, ty, tw * Math.min(1, dist/OCEAN_M), 6, 3); ctx.fill();
+
+  // score + combo
+  ctx.textAlign = "center"; ctx.font = "bold 16px Trebuchet MS"; ctx.fillStyle = "#eafff6";
+  ctx.fillText("Score " + (score + Math.round(dist)*10), W/2, 24);
+  if (combo >= 2) {
+    ctx.font = "bold 22px Trebuchet MS";
+    ctx.fillStyle = `hsl(${45 + combo*8},100%,60%)`;
+    ctx.fillText("CORN x" + combo + "!", W/2, 50);
+  }
+
+  // active power-up chips
+  let cx = 16, cy = 50;
+  const chip = (label, t, col) => { if (t>0){ ctx.fillStyle=col; roundRect(cx,cy,72,16,4); ctx.fill();
+    ctx.fillStyle="#08120f"; ctx.font="bold 10px Trebuchet MS"; ctx.textAlign="center";
+    ctx.fillText(label, cx+36, cy+12); cx += 78; } };
+  chip("SHIELD", shield, "#bfe9ff"); chip("BUBBLE "+Math.ceil(bubble), bubble, "#bfeaff");
+  chip("SPEED "+Math.ceil(hot), hot, "#ff7a52");
+}
+
+function panel(title, lines, color) {
+  ctx.fillStyle = "rgba(4,12,10,0.78)"; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.fillStyle = color; ctx.font = "bold 46px Trebuchet MS";
+  ctx.fillText(title, W/2, H/2 - 70);
+  ctx.font = "18px Trebuchet MS"; ctx.fillStyle = "#dff5ec";
+  lines.forEach((l, i) => ctx.fillText(l, W/2, H/2 - 20 + i * 28));
+}
+
+function drawTitle() {
+  ctx.fillStyle = "rgba(4,12,10,0.55)"; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#ff8a1e"; ctx.font = "bold 52px Trebuchet MS";
+  ctx.fillText("FLUSHED", W/2, H/2 - 80);
+  ctx.fillStyle = "#5cc8ff"; ctx.font = "bold 26px Trebuchet MS";
+  ctx.fillText("Down the Drain", W/2, H/2 - 46);
+  ctx.fillStyle = "#dff5ec"; ctx.font = "16px Trebuchet MS";
+  ctx.fillText("You are Sir Reginald Bubbles III, a freshly-flushed goldfish.", W/2, H/2 + 0);
+  ctx.fillText("Dodge the brown. Eat the corn. Reach the OCEAN.", W/2, H/2 + 26);
+  ctx.fillStyle = "#9fd8c8"; ctx.font = "13px Trebuchet MS";
+  ctx.fillText("Corn refills your green (clean) health. Hits drain your yellow", W/2, H/2 + 58);
+  ctx.fillText("filth reserve — and that never comes back. Don't run dry.", W/2, H/2 + 76);
+  ctx.fillStyle = "#ffd23f"; ctx.font = "bold 20px Trebuchet MS";
+  ctx.fillText("Hold SPACE / click / tap to begin", W/2, H/2 + 116);
+  if (best > 0) { ctx.fillStyle = "#9fd8c8"; ctx.font = "13px Trebuchet MS";
+    ctx.fillText("Best: " + best, W/2, H/2 + 140); }
+}
+
+function drawDead() {
+  panel("FLUSHED.", [
+    DEATH_LINES[lastDeath] || DEATH_LINES.poop,
+    "",
+    "Distance: " + Math.round(dist) + " m   •   Best combo: x" + bestCombo,
+    "Score: " + lastScore + (lastScore >= best ? "   (NEW BEST!)" : "   •   Best: " + best),
+  ], "#ff5a4a");
+  ctx.fillStyle = "#9fd8c8"; ctx.font = "italic 13px Trebuchet MS"; ctx.textAlign = "center";
+  ctx.fillText("\"We'll tell the kids he went to live on a farm.\"", W/2, H/2 + 96);
+  if (input.cooldown <= 0) { ctx.fillStyle = "#ffd23f"; ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Press SPACE / tap to try again", W/2, H/2 + 130); }
+}
+
+function drawWin() {
+  // ocean gradient flush
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#7fd2ff"); g.addColorStop(1,"#0d5b86");
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  for (let i=0;i<40;i++) ctx.fillRect((i*37+ (elapsed*30%37))%W, (i*53)%H, 3, 3);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff"; ctx.font = "bold 50px Trebuchet MS";
+  ctx.fillText("YOU REACHED THE OCEAN!", W/2, H/2 - 60);
+  ctx.font = "20px Trebuchet MS"; ctx.fillStyle = "#06304a";
+  ctx.fillText(WIN_LINE, W/2, H/2 - 16);
+  ctx.font = "bold 22px Trebuchet MS"; ctx.fillStyle = "#fff";
+  ctx.fillText("Distance: " + Math.round(dist) + " m   •   Score: " + lastScore, W/2, H/2 + 30);
+  ctx.fillText("Best combo: x" + bestCombo, W/2, H/2 + 60);
+  if (input.cooldown <= 0) { ctx.fillStyle = "#06304a"; ctx.font = "bold 18px Trebuchet MS";
+    ctx.fillText("Press SPACE / tap to swim again", W/2, H/2 + 100); }
+}
+
+function drawZoneBanner() {
+  const a = Math.min(1, zoneBanner) * Math.min(1, (2.6 - zoneBanner) * 3);
+  ctx.globalAlpha = a; ctx.textAlign = "center";
+  ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0, H/2 - 60, W, 90);
+  ctx.fillStyle = "#ffd23f"; ctx.font = "bold 38px Trebuchet MS";
+  ctx.fillText(ZONES[zoneIdx][1], W/2, H/2 - 16);
+  ctx.fillStyle = "#dff5ec"; ctx.font = "italic 16px Trebuchet MS";
+  ctx.fillText(ZONES[zoneIdx][2], W/2, H/2 + 12);
+  ctx.globalAlpha = 1;
+}
+
+// ---- color helper
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n>>16)&255, g = (n>>8)&255, b = n&255;
+  r = Math.min(255, r*f)|0; g = Math.min(255, g*f)|0; b = Math.min(255, b*f)|0;
+  return `rgb(${r},${g},${b})`;
+}
+
+// =========================================================================
+//  Main loop
+// =========================================================================
+let last = performance.now();
+function frame(now) {
+  let dt = (now - last) / 1000; last = now;
+  if (dt > 0.05) dt = 0.05;        // clamp (tab switches etc.)
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+reset();
+state = STATE.TITLE;
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
