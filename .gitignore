@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.exe
+*.apk
+*.aab
+
+# Capacitor / Android build artifacts (the android/ project itself IS committed)
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
+android/local.properties
+.gradle/
+build/
+
+# logs / os cruft
+*.log
+.DS_Store
+Thumbs.db

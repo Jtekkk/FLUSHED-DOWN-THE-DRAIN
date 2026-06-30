@@ -1,6 +1,63 @@
 # FLUSHED-DOWN-THE-DRAIN
 PLAY THIS FAST PACED GAME AS A GOLDFISH FLUSHED DOWN THE TOILET AND THROUGH THE SEWER PIPES DOODGING POOP AND TOIKET PAPER BLOBS EATING PIECES OF CORN FOR HEALTH MAKE YOUR WAY TO THE OCEAN TO WIN!
 
+---
+
+## 🎮 The game is built — here's how to play it
+
+It's a one-button HTML5 game (vanilla JS canvas) that runs in a browser, ships
+as a **Windows** desktop app, and as an **Android** app — all from the one
+codebase in [`www/`](www/).
+
+**Controls:** tap / click / hold **SPACE** (or ↑ / W) to swim **up**, release to
+**sink**. That's it. `P` pause · `M` mute · `F11` fullscreen (desktop).
+
+### Play instantly (web)
+
+```bash
+npm install
+npm run serve      # → http://localhost:5173
+```
+
+…or just open `www/index.html` in any browser.
+
+### Windows (.exe)
+
+```bash
+npm run dist:win   # → dist/Flushed-Setup-<ver>.exe  +  portable .exe
+npm start          # or just run it in a dev window
+```
+
+### Android (.apk)
+
+```bash
+npx cap sync android
+cd android && ./gradlew assembleDebug
+# → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+> Don't want to install a toolchain? Push to GitHub and the
+> [CI workflow](.github/workflows/build.yml) builds the `.exe` **and** `.apk`
+> for you and uploads them as artifacts.
+
+**Full build instructions, signing, and project layout → [BUILD.md](BUILD.md).**
+
+### What's implemented (from the design below)
+
+- One-button swim-up/sink physics with an auto-scrolling, accelerating current
+- Constantly-draining health; **corn** is the only way to refill it
+- Pipe-wall scrape damage for drifting out of the current
+- All six hazards — floaters, TP blobs, hair clogs, drain grates, plunger
+  gauntlet, chasing sewer rats
+- All four power-ups — corn, antacid shield, soap bubble, hot-sauce burst
+- The five escalating zones → the **OCEAN** win screen
+- Distance scoring, corn combos, clean-run bonuses
+- Per-obstacle death flavor text (plus the "gone to live on a farm" gag)
+
+---
+
+## Design doc
+
 FLUSHED: Down the Drain
 Genre: Fast-paced auto-swimmer / endless-ish gauntlet
 Vibe: Gross-out arcade. Think Flappy Bird met a porta-potty and they had a beautiful, disgusting baby.

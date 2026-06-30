@@ -1,0 +1,13 @@
+{
+  "appId": "com.reginald.flushed",
+  "appName": "Flushed",
+  "webDir": "www",
+  "backgroundColor": "#05060a",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#05060a"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}
