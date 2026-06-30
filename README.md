@@ -6,6 +6,7 @@ The game is a single self-contained file — no build step, no dependencies.
 
 - **Open `index.html`** in any modern browser (double-click it, or serve the folder and visit it).
 - **Controls:** one button. Hold **Space** / click / tap to swim **up**, release to **sink**. That's the whole game.
+- **Difficulty 1–10:** pick your level on the title screen (and on the death/win screens before a retry) — click/tap a number, or use **← / →** or the **number keys** (`0` = 10). Level **5** is the baseline; **1** is a gentle cruise, **10** is brutal. Difficulty scales scroll speed, how often obstacles spawn, how fast the water poisons you, how hard hits land, and how generously power-ups appear. Your choice is remembered.
 - Works on desktop and mobile (touch).
 
 ## How health works (the twist)

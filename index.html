@@ -98,6 +98,22 @@ let obstacles, pickups, particles;
 let shake = 0, zoneIdx = 0, zoneBanner = 0, lastDeath = "poop", started = false;
 let best = +(localStorage.getItem("flushed_best") || 0);
 
+// ---- Difficulty 1..10 (5 ≈ baseline). Chosen on the title/retry screens. ----
+let difficulty = Math.max(1, Math.min(10, +(localStorage.getItem("flushed_diff") || 5)));
+function setDifficulty(v) { difficulty = Math.max(1, Math.min(10, v | 0)); localStorage.setItem("flushed_diff", difficulty); }
+// Scalars applied at run start so a run keeps a consistent difficulty.
+let dScale = { speed: 1, spawn: 1, poison: 1, dmg: 1, help: 1 };
+function applyDifficulty() {
+  const d = difficulty;
+  dScale = {
+    speed:  0.65 + 0.090 * (d - 1),  // scroll speed     0.65 .. 1.46
+    spawn:  1.35 - 0.070 * (d - 1),  // x obstacle gap    1.35 .. 0.72  (smaller = harder)
+    poison: 0.55 + 0.090 * (d - 1),  // clean drain rate  0.55 .. 1.36
+    dmg:    0.75 + 0.055 * (d - 1),  // hit damage        0.75 .. 1.25
+    help:   0.42 + 0.030 * (10 - d), // power-up chance   0.69 .. 0.42  (easier = more help)
+  };
+}
+
 function reset() {
   fish.y = H/2; fish.vy = 0; fish.tilt = 0; fish.wag = 0; fish.flash = 0;
   clean = CLEAN_MAX; filth = FILTH_MAX;
@@ -106,6 +122,7 @@ function reset() {
   shield = 0; bubble = 0; hot = 0; cleanZoneT = 0;
   obstacles = []; pickups = []; particles = [];
   shake = 0; zoneIdx = 0; zoneBanner = 0;
+  applyDifficulty();
 }
 
 // =========================================================================
@@ -122,13 +139,40 @@ function press() {
 function release() { holding = false; }
 const input = { cooldown: 0 };
 
+// Map a pointer event to canvas coordinates (canvas is CSS-scaled).
+function canvasPos(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (clientX - r.left) * (W / r.width), y: (clientY - r.top) * (H / r.height) };
+}
+// If the pointer landed on a difficulty box (only on non-play screens),
+// set difficulty and report that the pointer was consumed (so we don't start).
+function pickDifficulty(clientX, clientY) {
+  if (state === STATE.PLAY) return false;
+  const p = canvasPos(clientX, clientY);
+  for (const b of diffBoxes())
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) {
+      setDifficulty(b.n); beep(300 + b.n * 30, 0.04); return true;
+    }
+  return false;
+}
+
 addEventListener("keydown", e => {
+  if (state !== STATE.PLAY) {                    // pick difficulty on title / retry screens
+    if (e.code === "ArrowLeft")  { setDifficulty(difficulty - 1); beep(330, 0.04); e.preventDefault(); return; }
+    if (e.code === "ArrowRight") { setDifficulty(difficulty + 1); beep(360, 0.04); e.preventDefault(); return; }
+    const m = /^Digit([0-9])$/.exec(e.code);
+    if (m) { setDifficulty(m[1] === "0" ? 10 : +m[1]); beep(330, 0.04); e.preventDefault(); return; }
+  }
   if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); press(); }
 });
 addEventListener("keyup", e => { if (e.code === "Space" || e.code === "ArrowUp") release(); });
-canvas.addEventListener("mousedown", e => { e.preventDefault(); press(); });
+canvas.addEventListener("mousedown", e => { e.preventDefault(); if (!pickDifficulty(e.clientX, e.clientY)) press(); });
 addEventListener("mouseup", release);
-canvas.addEventListener("touchstart", e => { e.preventDefault(); press(); }, { passive:false });
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  if (!pickDifficulty(t.clientX, t.clientY)) press();
+}, { passive:false });
 addEventListener("touchend", e => { e.preventDefault(); release(); }, { passive:false });
 
 // =========================================================================
@@ -216,7 +260,7 @@ function update(dt) {
   const ramp = Math.min(elapsed / 60, 1);
   let baseSpeed = 120 + ramp * 160 + zoneIdx * 8;
   if (zoneIdx === 4) baseSpeed += 90;          // Outflow = sprint
-  scroll = baseSpeed * (hot > 0 ? 1.7 : 1) * (bubble > 0 ? 1.25 : 1);
+  scroll = baseSpeed * dScale.speed * (hot > 0 ? 1.7 : 1) * (bubble > 0 ? 1.25 : 1);
 
   // --- distance & zone
   dist += scroll * dt / PX_PER_M;
@@ -242,19 +286,19 @@ function update(dt) {
 
   // --- poison drains clean; clean 0 => starved death
   const inOutflow = zoneIdx >= 4;
-  clean -= POISON * (inOutflow ? 0.5 : 1) * dt;   // water gets cleaner near the sea
+  clean -= POISON * dScale.poison * (inOutflow ? 0.5 : 1) * dt;  // water gets cleaner near the sea
   if (clean <= 0) { clean = 0; die("starved"); return; }
 
   // --- combo timer decay
   if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
 
   // --- spawning: interval 1.6s -> 0.7s with elapsed, lighter in Outflow
-  const interval = Math.max(0.7, 1.6 - elapsed * 0.014) * (zoneIdx === 4 ? 1.5 : 1);
+  const interval = Math.max(0.55, (1.6 - elapsed * 0.014) * dScale.spawn) * (zoneIdx === 4 ? 1.5 : 1);
   spawnT -= dt;
   if (spawnT <= 0 && zoneIdx < 5) {
     spawnT = interval * rand(0.85, 1.25);
     spawnObstacle();
-    if (Math.random() < 0.55) spawnPickup();
+    if (Math.random() < dScale.help) spawnPickup();
   }
 
   moveEntities(dt);
@@ -284,7 +328,7 @@ function moveEntities(dt) {
 
     if (!o.hit && hitObstacle(o, fr)) {
       o.hit = true;
-      damage(o.dmg, o.kind);
+      damage(o.dmg * dScale.dmg, o.kind);
     }
   }
   obstacles = obstacles.filter(o => o.x > -120 && !o.gone);
@@ -609,6 +653,8 @@ function drawHUD() {
   const tw = 200, tx = W - 16 - tw, ty = 54;
   ctx.fillStyle = "rgba(0,0,0,0.4)"; roundRect(tx, ty, tw, 6, 3); ctx.fill();
   ctx.fillStyle = "#5cc8ff"; roundRect(tx, ty, tw * Math.min(1, dist/OCEAN_M), 6, 3); ctx.fill();
+  ctx.fillStyle = "#7fb8a8"; ctx.font = "11px Trebuchet MS";
+  ctx.fillText("Difficulty " + difficulty + "/10", W - 16, 76);
 
   // score + combo
   ctx.textAlign = "center"; ctx.font = "bold 16px Trebuchet MS"; ctx.fillStyle = "#eafff6";
@@ -637,23 +683,54 @@ function panel(title, lines, color) {
   lines.forEach((l, i) => ctx.fillText(l, W/2, H/2 - 20 + i * 28));
 }
 
+// ---- Difficulty selector (shared geometry for draw + hit-test) ----------
+function diffRowY() { return state === STATE.TITLE ? H/2 + 28 : H/2 + 150; }
+function diffBoxes() {
+  const n = 10, bw = 46, gap = 6, total = n*bw + (n-1)*gap;
+  const x0 = (W - total) / 2, y = diffRowY(), h = 30, out = [];
+  for (let i = 0; i < n; i++) out.push({ n: i+1, x: x0 + i*(bw+gap), y, w: bw, h });
+  return out;
+}
+function drawDiffSelector() {
+  const boxes = diffBoxes(), first = boxes[0], lastB = boxes[9];
+  // faint backing so it reads on dark OR ocean-light screens
+  ctx.fillStyle = "rgba(4,12,10,0.5)";
+  roundRect(first.x - 12, first.y - 28, (lastB.x + lastB.w) - first.x + 24, first.h + 52, 8); ctx.fill();
+  ctx.textAlign = "center"; ctx.font = "bold 14px Trebuchet MS"; ctx.fillStyle = "#cfeee2";
+  ctx.fillText("DIFFICULTY  " + difficulty + " / 10", W/2, first.y - 12);
+  ctx.font = "bold 14px Trebuchet MS";
+  for (const b of boxes) {
+    const sel = b.n === difficulty;
+    ctx.fillStyle = `hsl(${130 - (b.n-1)*13}, 70%, ${sel ? 55 : 30}%)`;
+    roundRect(b.x, b.y, b.w, b.h, 5); ctx.fill();
+    if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; roundRect(b.x, b.y, b.w, b.h, 5); ctx.stroke(); }
+    ctx.fillStyle = sel ? "#fff" : "rgba(255,255,255,0.82)";
+    ctx.fillText(b.n, b.x + b.w/2, b.y + b.h/2 + 5);
+  }
+  ctx.fillStyle = "#86c3b3"; ctx.font = "11px Trebuchet MS";
+  ctx.fillText("click / tap a number  •  or  ← / → / number keys", W/2, lastB.y + lastB.h + 16);
+}
+
 function drawTitle() {
   ctx.fillStyle = "rgba(4,12,10,0.55)"; ctx.fillRect(0, 0, W, H);
   ctx.textAlign = "center";
   ctx.fillStyle = "#ff8a1e"; ctx.font = "bold 52px Trebuchet MS";
-  ctx.fillText("FLUSHED", W/2, H/2 - 80);
+  ctx.fillText("FLUSHED", W/2, H/2 - 150);
   ctx.fillStyle = "#5cc8ff"; ctx.font = "bold 26px Trebuchet MS";
-  ctx.fillText("Down the Drain", W/2, H/2 - 46);
+  ctx.fillText("Down the Drain", W/2, H/2 - 116);
   ctx.fillStyle = "#dff5ec"; ctx.font = "16px Trebuchet MS";
-  ctx.fillText("You are Sir Reginald Bubbles III, a freshly-flushed goldfish.", W/2, H/2 + 0);
-  ctx.fillText("Dodge the brown. Eat the corn. Reach the OCEAN.", W/2, H/2 + 26);
+  ctx.fillText("You are Sir Reginald Bubbles III, a freshly-flushed goldfish.", W/2, H/2 - 86);
+  ctx.fillText("Dodge the brown. Eat the corn. Reach the OCEAN.", W/2, H/2 - 62);
   ctx.fillStyle = "#9fd8c8"; ctx.font = "13px Trebuchet MS";
-  ctx.fillText("Corn refills your green (clean) health. Hits drain your yellow", W/2, H/2 + 58);
-  ctx.fillText("filth reserve — and that never comes back. Don't run dry.", W/2, H/2 + 76);
-  ctx.fillStyle = "#ffd23f"; ctx.font = "bold 20px Trebuchet MS";
-  ctx.fillText("Hold SPACE / click / tap to begin", W/2, H/2 + 116);
+  ctx.fillText("Corn refills your green (clean) health. Hits drain your yellow", W/2, H/2 - 38);
+  ctx.fillText("filth reserve — and that never comes back. Don't run dry.", W/2, H/2 - 22);
+
+  drawDiffSelector();
+
+  ctx.fillStyle = "#ffd23f"; ctx.font = "bold 20px Trebuchet MS"; ctx.textAlign = "center";
+  ctx.fillText("Hold SPACE / click / tap to begin", W/2, H/2 + 96);
   if (best > 0) { ctx.fillStyle = "#9fd8c8"; ctx.font = "13px Trebuchet MS";
-    ctx.fillText("Best: " + best, W/2, H/2 + 140); }
+    ctx.fillText("Best: " + best, W/2, H/2 + 120); }
 }
 
 function drawDead() {
@@ -666,7 +743,8 @@ function drawDead() {
   ctx.fillStyle = "#9fd8c8"; ctx.font = "italic 13px Trebuchet MS"; ctx.textAlign = "center";
   ctx.fillText("\"We'll tell the kids he went to live on a farm.\"", W/2, H/2 + 96);
   if (input.cooldown <= 0) { ctx.fillStyle = "#ffd23f"; ctx.font = "bold 18px Trebuchet MS";
-    ctx.fillText("Press SPACE / tap to try again", W/2, H/2 + 130); }
+    ctx.fillText("Press SPACE / tap to try again", W/2, H/2 + 120); }
+  drawDiffSelector();
 }
 
 function drawWin() {
@@ -686,6 +764,7 @@ function drawWin() {
   ctx.fillText("Best combo: x" + bestCombo, W/2, H/2 + 60);
   if (input.cooldown <= 0) { ctx.fillStyle = "#06304a"; ctx.font = "bold 18px Trebuchet MS";
     ctx.fillText("Press SPACE / tap to swim again", W/2, H/2 + 100); }
+  drawDiffSelector();
 }
 
 function drawZoneBanner() {
