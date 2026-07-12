@@ -50,3 +50,31 @@ Death screen is the gag payoff: "Reginald was last seen near the wastewater inta
 
 Why it works
 One-button means anyone picks it up in two seconds. The corn-for-health mechanic is the joke and the gameplay at the same time, which is the best kind of design — mechanic and theme are the same thing. And "reach the ocean" gives a real finish line so it's not just a soulless endless-runner; there's a win state to chase.
+
+---
+
+## Nocturne — MP3 → Music Video (`index.html`)
+
+A self-contained, client-side music-video engine. Open `index.html` in any modern
+browser, drop in an MP3 (or WAV / M4A / OGG), and the track becomes an
+audio-reactive video you can play, mix, and record — no server, no upload, no
+account. The file you loaded never leaves the browser.
+
+**What it does**
+- **Live audio-reactive visuals** driven by a Web Audio `AnalyserNode` (FFT):
+  band energies (bass / mid / treble) plus energy-based beat detection.
+- **Four scenes** — Spectrum (mirrored log bars), Radial burst, Waveform ribbons,
+  and a Particle field — each responding to a different mix of the frequency bands.
+- **Auto-VJ** cuts scenes (and occasionally rolls the palette) on strong beats for
+  a hands-off music-video feel; toggle it off to direct it yourself.
+- **Five curated palettes** (Vapor, Ember, Aurora, Ice, Mono) sampled as color ramps.
+- **Record to a video file**: `canvas.captureStream()` + the audio track are muxed
+  through `MediaRecorder` and downloaded as a `.webm` that plays anywhere.
+- Title card, timecode/FFT/BPM readouts, fullscreen, and keyboard control.
+
+**Keyboard**: `Space` play/pause · `←/→` seek · `1–4` scene · `P` palette ·
+`V` Auto-VJ · `F` fullscreen · `R` record.
+
+**How to run**: just open the file. It's a single HTML document with no build step
+and no dependencies. (Recording requires a browser that supports `MediaRecorder` +
+canvas capture — current Chrome, Edge, and Firefox.)
