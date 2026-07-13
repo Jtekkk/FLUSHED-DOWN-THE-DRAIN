@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>FLUSHED: Down the Drain</title>
+<style>
+  :root{
+    --ink:#0b0f14;
+    --slime:#7cb342;
+    --slime-dim:#4e7a26;
+    --corn:#ffd34e;
+    --brown:#5b3a1e;
+    --tp:#f4f1e8;
+    --ocean:#2bb3e0;
+    --danger:#ff4d4d;
+    --panel:rgba(10,18,14,0.82);
+    --hud:#dfeede;
+    --mono:"Courier New",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:#05080a;color:var(--hud);
+    font-family:var(--mono);overflow:hidden;-webkit-tap-highlight-color:transparent;
+    touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;}
+  #wrap{
+    position:relative;width:100%;height:100%;
+    display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 120% at 50% 0%,#10211a 0%,#05080a 70%);
+  }
+  #stage{
+    position:relative;width:min(100vw, calc(100vh * (900/506)));
+    aspect-ratio:900/506;max-width:1100px;
+    box-shadow:0 0 0 2px #1a2a20, 0 24px 60px rgba(0,0,0,.6);
+    border-radius:10px;overflow:hidden;background:#0a130e;
+  }
+  canvas{display:block;width:100%;height:100%;image-rendering:auto;cursor:pointer;touch-action:none;}
+  #errbox{position:fixed;left:0;right:0;top:0;z-index:9999;display:none;
+    background:#3a0c0c;color:#ffd6d6;font:12px/1.45 var(--mono);
+    padding:10px 12px;white-space:pre-wrap;word-break:break-word;max-height:48vh;overflow:auto;}
+  /* overlay screens */
+  .screen{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;text-align:center;
+    padding:6%;gap:14px;background:var(--panel);
+    backdrop-filter:blur(2px);transition:opacity .25s ease;
+  }
+  .hidden{opacity:0;pointer-events:none;}
+  h1{margin:0;font-size:clamp(28px,6.2vw,68px);letter-spacing:2px;line-height:.95;
+    color:var(--corn);text-shadow:3px 3px 0 var(--brown), 0 0 26px rgba(255,211,78,.35);}
+  h1 small{display:block;font-size:.34em;letter-spacing:6px;color:var(--slime);
+    text-shadow:none;margin-top:8px;}
+  p.tag{margin:0;max-width:560px;font-size:clamp(12px,1.9vw,16px);color:#bcd3c0;line-height:1.5;}
+  .controls{font-size:clamp(11px,1.7vw,14px);color:#9fb7a3;line-height:1.7;}
+  .key{display:inline-block;background:#16261c;border:1px solid #2f4a36;border-radius:6px;
+    padding:1px 9px;color:#dff3e3;margin:0 2px;}
+  button.play{
+    margin-top:8px;font-family:var(--mono);font-weight:bold;cursor:pointer;
+    font-size:clamp(15px,2.6vw,22px);letter-spacing:2px;color:#08120b;
+    background:linear-gradient(180deg,#a6e05a,#6fae2e);border:none;border-radius:999px;
+    padding:14px 34px;box-shadow:0 6px 0 #3f6a1c, 0 10px 22px rgba(0,0,0,.4);
+    transition:transform .06s ease, box-shadow .06s ease;
+  }
+  button.play:active{transform:translateY(4px);box-shadow:0 2px 0 #3f6a1c,0 6px 14px rgba(0,0,0,.4);}
+  .stat{font-size:clamp(13px,2.2vw,19px);color:#e8f4e2;}
+  .stat b{color:var(--corn);}
+  .epitaph{font-style:italic;color:#cfd9c9;max-width:520px;font-size:clamp(12px,2vw,16px);}
+  .deadtitle{color:var(--danger);text-shadow:3px 3px 0 #3a0c0c;}
+  .wintitle{color:var(--ocean);text-shadow:3px 3px 0 #0a3a4a, 0 0 30px rgba(43,179,224,.4);}
+  .credit{position:absolute;bottom:8px;right:12px;font-size:10px;color:#3f5946;letter-spacing:1px;}
+  .diffwrap{display:flex;flex-direction:column;align-items:center;gap:6px;margin:2px 0;}
+  .difftitle{font-size:clamp(10px,1.6vw,13px);letter-spacing:3px;color:#9fb7a3;}
+  .diffrow{display:flex;align-items:center;gap:16px;}
+  .diffbtn{width:48px;height:48px;border-radius:12px;border:1px solid #2f4a36;background:#16261c;
+    color:#a6e05a;font-size:28px;font-family:var(--mono);line-height:1;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;-webkit-user-select:none;user-select:none;
+    transition:transform .06s ease,background .12s ease;}
+  .diffbtn:active{transform:scale(.88);background:#1d3325;}
+  .diff-val{min-width:52px;text-align:center;font-size:clamp(28px,5.4vw,44px);font-weight:bold;
+    color:var(--corn);text-shadow:2px 2px 0 var(--brown);}
+  .diff-desc{font-size:clamp(11px,1.8vw,15px);color:#bcd3c0;min-height:1.25em;}
+  .choices{display:flex;flex-direction:column;gap:10px;width:min(94%,540px);margin-top:6px;}
+  .choice{font-family:var(--mono);cursor:pointer;text-align:left;font-size:clamp(13px,2.1vw,16px);
+    color:#eaf6e6;background:#16261c;border:1px solid #2f4a36;border-radius:12px;padding:14px 16px;
+    line-height:1.35;-webkit-user-select:none;user-select:none;
+    transition:transform .06s ease,background .12s ease,border-color .12s ease;}
+  .choice:active{transform:scale(.98);}
+  .choice:hover{background:#1d3325;border-color:#5a8a3e;}
+  #btn-cave:hover{border-color:#e85aa0;background:#2a1622;}
+  #btn-swim:hover{border-color:#3aa8d6;background:#102633;}
+  #mute{position:absolute;top:10px;right:10px;z-index:5;width:38px;height:38px;border-radius:50%;
+    cursor:pointer;border:1px solid #2f4a36;background:rgba(10,18,14,0.7);color:#a6e05a;
+    font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center;
+    transition:transform .06s ease,color .15s ease;}
+  #mute:hover{transform:scale(1.08);}
+  #mute:active{transform:scale(.94);}
+  #mute.off{color:#6b7c6e;text-decoration:line-through;}
+
+  /* Phones/short viewports: overlay menus break out of the short game strip
+     so the FLUSH ME / retry / win buttons can't be clipped off-screen. */
+  @media (max-width:600px), (max-height:540px){
+    .screen{
+      position:fixed;
+      inset:0;
+      z-index:6;
+      justify-content:center;
+      justify-content:safe center;   /* centers when it fits, scrolls (no top clip) when it doesn't */
+      overflow-y:auto;
+      -webkit-overflow-scrolling:touch;
+      gap:11px;
+      padding:max(18px,env(safe-area-inset-top)) 7%
+              calc(22px + env(safe-area-inset-bottom)) 7%;
+    }
+    .screen > *{ flex:0 0 auto; }       /* don't let flexbox squash items */
+    button.play{ padding:16px 38px; }   /* bigger tap target on phones */
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game" width="900" height="506"></canvas>
+    <div id="errbox" title="tap to dismiss"></div>
+
+    <!-- TITLE -->
+    <div class="screen" id="screen-title">
+      <h1>FLUSHED<small>DOWN THE DRAIN</small></h1>
+      <p class="tag">You are <b>Sir Reginald Bubbles III</b>, a beloved family goldfish — just <i>unceremoniously flushed</i>. Survive the sewer, best the <b>CLOGFATHER</b> at its end, then ride the <b>RIVER</b> out to the open <b>OCEAN</b>.</p>
+      <div class="controls">
+        <span class="key">CLICK</span> / <span class="key">TAP</span> / <span class="key">SPACE</span> &nbsp;hold to swim up · release to sink<br>
+        🌽 corn = health &nbsp;·&nbsp; 💩 poop &amp; 🧻 clogs = ouch &nbsp;·&nbsp; 🪨 rocks &amp; 🪝 hooks lurk in the river<br>
+        BOSS: dodge its filth, then <b>ram the glowing 🌽</b> to clog it up
+      </div>
+      <div class="diffwrap">
+        <div class="difftitle">DIFFICULTY 1–10</div>
+        <div class="diffrow">
+          <button class="diffbtn diff-down" type="button" aria-label="lower difficulty">−</button>
+          <div class="diff-val">5</div>
+          <button class="diffbtn diff-up" type="button" aria-label="raise difficulty">+</button>
+        </div>
+        <div class="diff-desc">Balanced</div>
+      </div>
+      <button class="play" id="btn-start">FLUSH ME ▸</button>
+    </div>
+
+    <!-- DEATH -->
+    <div class="screen hidden" id="screen-dead">
+      <h1 class="deadtitle">CLOGGED</h1>
+      <p class="epitaph" id="epitaph">—</p>
+      <div class="stat">Distance: <b id="dead-dist">0</b> m &nbsp;·&nbsp; Corn eaten: <b id="dead-corn">0</b></div>
+      <div class="stat" id="dead-best" style="font-size:.85em;color:#9fb7a3;">Best: 0 m</div>
+      <div class="diffwrap">
+        <div class="difftitle">DIFFICULTY 1–10</div>
+        <div class="diffrow">
+          <button class="diffbtn diff-down" type="button" aria-label="lower difficulty">−</button>
+          <div class="diff-val">5</div>
+          <button class="diffbtn diff-up" type="button" aria-label="raise difficulty">+</button>
+        </div>
+        <div class="diff-desc">Balanced</div>
+      </div>
+      <button class="play" id="btn-retry">FLUSH AGAIN ▸</button>
+    </div>
+
+    <!-- WIN: choose your fate -->
+    <div class="screen hidden" id="screen-win">
+      <h1 class="wintitle">THE OCEAN! 🌊</h1>
+      <div class="stat">Survived <b id="win-time">0</b>s · Corn <b id="win-corn">0</b> · Score <b id="win-score">0</b></div>
+      <p class="tag">Reginald breaks the surface, free at last. What does he do now?</p>
+      <div class="choices">
+        <button class="choice" id="btn-shell" type="button">🐚 Move into a seashell and make it home</button>
+        <button class="choice" id="btn-cave"  type="button">🩷 Settle into a cozy pink cave that smells just like him</button>
+        <button class="choice" id="btn-swim"  type="button">🌊 Go for a casual swim and meet the locals</button>
+      </div>
+    </div>
+
+    <!-- ENDING result -->
+    <div class="screen hidden" id="screen-ending">
+      <h1 class="wintitle" id="end-title">—</h1>
+      <p class="epitaph" id="end-text">—</p>
+      <div class="diffwrap">
+        <div class="difftitle">DIFFICULTY 1–10</div>
+        <div class="diffrow">
+          <button class="diffbtn diff-down" type="button" aria-label="lower difficulty">−</button>
+          <div class="diff-val">5</div>
+          <button class="diffbtn diff-up" type="button" aria-label="raise difficulty">+</button>
+        </div>
+        <div class="diff-desc">Balanced</div>
+      </div>
+      <button class="play" id="btn-end-again">PLAY AGAIN ▸</button>
+    </div>
+
+    <button id="mute" title="Mute / unmute music (M)">♪</button>
+    <div class="credit">canvas · one button · gross</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function showErr(msg){
+    var b=document.getElementById('errbox');
+    if(b){ b.style.display='block'; b.textContent='⚠ '+msg+'\n\n(tap to dismiss — copy this and send it to me)'; }
+  }
+  window.addEventListener('error', function(ev){
+    showErr((ev.message||'script error')+'  @line '+(ev.lineno||'?')+':'+(ev.colno||'?'));
+  });
+  window.addEventListener('unhandledrejection', function(ev){
+    var r=ev.reason; showErr('promise: '+(r&&r.message?r.message:r));
+  });
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id==='errbox') e.target.style.display='none';
+  });
+})();
+</script>
+<script>window.__TRACKS = [{name:"Down the Drain",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/01-down-the-drain.mp3"},{name:"Bubble Trouble",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/02-bubble-trouble.mp3"},{name:"Pipe Rider",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/03-pipe-rider.mp3"},{name:"Into the Murk",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/04-into-the-murk.mp3"},{name:"Ocean Bound",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/05-ocean-bound.mp3"},{name:"Saltwater Getaway",data:"https://cdn.jsdelivr.net/gh/jtekkk/flushedaudio@main/06-saltwater-getaway.mp3"}];</script>
+<script>
+(() => {
+"use strict";
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 900, H = 506;
+
+// ---------- screens ----------
+const elTitle = document.getElementById('screen-title');
+const elDead  = document.getElementById('screen-dead');
+const elWin   = document.getElementById('screen-win');
+const elEnd   = document.getElementById('screen-ending');
+
+// ---------- state ----------
+const STATE = { TITLE:0, PLAY:1, DEAD:2, WIN:3, ENDING:4 };
+let state = STATE.TITLE;
+
+const BOSS_DISTANCE = 1100;       // end of the sewer — THE CLOGFATHER boss gate
+const WIN_DISTANCE = 2100;        // meters to the open ocean (out through the river)
+let best = 0;
+
+// The current freezes here while the turd boss holds the pipe. Its own arena zone.
+const BOSS_ZONE = {level:1, name:"SEWER'S END", tint:"#2a1016", flow:"#3a1420",
+                   rats:false, intensity:0.25, types:[]};
+
+// input
+let thrust = false;
+
+// world
+let distance, scroll, cornEaten, runTime, shake, flash, bgFlow, zoneName;
+let player, ents, parts, spawnTimer, powerTimer, ratTimer, lastZone;
+let boss = null, bossActive = false, bossDefeated = false, curLevel = 1;
+
+// ---------- helpers ----------
+const rand = (a,b)=> a + Math.random()*(b-a);
+const clamp = (v,a,b)=> v<a?a:v>b?b:v;
+const chance = p => Math.random() < p;
+
+// ---------- difficulty ----------
+// 1 = lazy float, 10 = brisk but fair (never brutal). d in [0,1].
+let difficulty = 5;
+let DIFF;
+function buildDiff(L){
+  L = clamp(Math.round(L), 1, 10);
+  const d = (L - 1) / 9;
+  return {
+    level:    L,
+    scroll:   0.60 + d*0.55,   // current speed
+    drain:    0.25 + d*0.90,   // poison HP loss
+    spawn:    1.90 - d*1.05,   // gap between obstacles (×, higher = easier)
+    dmg:      0.45 + d*0.55,   // obstacle / scrape damage (capped ≤1, never brutal)
+    cornHeal: 1.60 - d*0.65,   // health restored per corn (×)
+    cornFreq: 0.85 - d*0.18,   // chance corn rides along with a spawn
+    gapBonus: (1 - d)*42,      // extra px on grate / hair-clog gaps
+    ratGap:   1.80 - d*0.90,   // spacing between rats (×)
+    iframe:   0.70 + (1 - d)*0.35, // invulnerability window after a hit
+    maxhp:    100 + (1 - d)*40  // starting / max health cushion
+  };
+}
+DIFF = buildDiff(difficulty);
+
+// ---------- music ----------
+let nowPlaying = null;
+const MUSIC_VOL = 0.5;
+const Music = {
+  el:null, idx:-1, muted:false, fadeT:null,
+  init(){
+    this.el = new Audio(); this.el.loop = true; this.el.preload = "auto"; this.el.volume = 0;
+    this.el.addEventListener('error', ()=>{
+      var e = this.el.error;
+      var codes = {1:'ABORTED',2:'NETWORK (fetch failed / blocked)',3:'DECODE (file corrupt)',4:'SRC_NOT_SUPPORTED (404, or host served wrong MIME type)'};
+      var b = document.getElementById('errbox');
+      if (b){ b.style.display='block';
+        b.textContent='\u26a0 AUDIO FAILED\nsrc: '+(this.el.currentSrc||this.el.src)+'\nMediaError '+(e?e.code:'?')+': '+(e?codes[e.code]:'')+'\n\n(tap to dismiss \u2014 send me this)'; }
+    });
+  },
+  playRandom(){
+    const T = window.__TRACKS;
+    if (!T || !T.length) return;
+    let i, n = T.length;
+    do { i = (Math.random()*n)|0; } while (n>1 && i===this.idx);
+    this.idx = i;
+    try {
+      this.el.src = T[i].data;
+      this.el.currentTime = 0;
+      this.el.volume = 0;
+      const p = this.el.play();
+      if (p && p.catch) p.catch((err)=>{
+        var b = document.getElementById('errbox');
+        if (b){ b.style.display='block';
+          b.textContent='\u26a0 play() rejected: '+(err&&err.name?err.name:'')+' \u2014 '+(err&&err.message?err.message:err)+'\nsrc: '+(this.el.currentSrc||this.el.src)+'\n\n(tap to dismiss \u2014 send me this)'; }
+      });
+    } catch(e){}
+    this._fade(this.muted ? 0 : MUSIC_VOL);
+    nowPlaying = { name: T[i].name, t: 4.0 };
+  },
+  stop(){ this._fade(0, ()=>{ try{ this.el.pause(); }catch(e){} }); },
+  _fade(to, done){
+    clearInterval(this.fadeT);
+    this.fadeT = setInterval(()=>{
+      const cur = this.el.volume, step = 0.05;
+      if (Math.abs(cur-to) <= step){ this.el.volume = to; clearInterval(this.fadeT); if(done)done(); }
+      else this.el.volume = clamp(cur + (to>cur?step:-step), 0, 1);
+    }, 30);
+  },
+  toggleMute(){
+    this.muted = !this.muted;
+    if (this.muted){ clearInterval(this.fadeT); this.el.volume = 0; }
+    else { this._fade(MUSIC_VOL); if (this.el.paused && this.el.src){ const p=this.el.play(); if(p&&p.catch)p.catch(()=>{}); } }
+    return this.muted;
+  }
+};
+Music.init();
+
+function reset(){
+  distance = 0;
+  scroll = 200;
+  cornEaten = 0;
+  runTime = 0;
+  shake = 0;
+  flash = 0;
+  bgFlow = 0;
+  lastZone = "";
+  player = {
+    x: W*0.26, y: H*0.5, vy: 0, r: 16,
+    tilt: 0, wig: 0, hp: DIFF.maxhp, maxhp: DIFF.maxhp,
+    iframe: 0,            // invuln timer after a hit
+    shield: 0,            // antacid: one free bounce
+    bubble: 0,            // soap: full invincible window
+    boost: 0,             // hot sauce: speed window
+    dead: false
+  };
+  ents = [];
+  parts = [];
+  spawnTimer = 1.4;       // grace before first obstacle
+  powerTimer = rand(6,9);
+  ratTimer = 999;
+  boss = null; bossActive = false; bossDefeated = false; curLevel = 1;
+}
+
+// ---------- zones ----------
+// LEVEL 1 = THE SEWER (0 → boss).  LEVEL 2 = THE RIVER (boss → OCEAN).
+function zoneFor(d){
+  // ---- LEVEL 1 · THE SEWER ----
+  if (d < 150)  return {level:1, name:"THE BOWL DROP",     tint:"#163b2b", flow:"#1f5740", rats:false, intensity:0.0,  types:["floater"]};
+  if (d < 380)  return {level:1, name:"RESIDENTIAL PIPES", tint:"#173026", flow:"#234f3a", rats:false, intensity:0.35, types:["floater","floater","tp"]};
+  if (d < 620)  return {level:1, name:"THE MAIN LINE",     tint:"#241f17", flow:"#3a3020", rats:true,  intensity:0.6,  types:["floater","tp","grate","floater"]};
+  if (d < 880)  return {level:1, name:"TREATMENT PLANT",   tint:"#2a1414", flow:"#43201f", rats:true,  intensity:0.9,  types:["hair","grate","plunger","tp","floater"]};
+  if (d < BOSS_DISTANCE)
+                return {level:1, name:"THE OUTFLOW",       tint:"#241016", flow:"#3a1420", rats:false, intensity:0.6, sprint:true, types:["floater","grate","plunger"]};
+  // ---- LEVEL 2 · THE RIVER ----
+  if (d < 1360) return {level:2, name:"THE RIVER MOUTH",   tint:"#123b3c", flow:"#1f6f70", rats:false, intensity:0.3,  clean:true, types:["rock","log","rock"]};
+  if (d < 1640) return {level:2, name:"DOWN THE RIVER",    tint:"#134a44", flow:"#26887a", rats:false, intensity:0.55, clean:true, sprint:true, types:["rock","log","hook","grate"]};
+  if (d < 1900) return {level:2, name:"THE ESTUARY",       tint:"#124a57", flow:"#1f88a0", rats:false, intensity:0.4,  clean:true, types:["log","hook","rock"]};
+  return          {level:2, name:"OCEAN AHEAD",     tint:"#0e5a78", flow:"#1f8fc0", rats:false, intensity:0.15, clean:true, types:["log"]};
+}
+// Zone in effect right now (the boss freezes the world in its own arena).
+function currentZone(){ return bossActive ? BOSS_ZONE : zoneFor(distance); }
+
+// ---------- spawning ----------
+function spawn(z){
+  z = z || zoneFor(distance);
+  const t = z.types[(Math.random()*z.types.length)|0];
+  const speedMul = 1; // entities ride the scroll
+  if (t === "floater"){
+    const big = chance(0.3);
+    ents.push({k:"poop", x:W+40, y:rand(60,H-60), r: big?28:18, vy:rand(-12,12), big});
+  } else if (t === "tp"){
+    ents.push({k:"tp", x:W+50, y:rand(70,H-70), r:22, grow:0, vy:rand(-8,8)});
+  } else if (t === "grate"){
+    const gapY = rand(120,H-120), gapH = rand(120,170) + DIFF.gapBonus;
+    ents.push({k:"grate", x:W+30, gapY, gapH});
+  } else if (t === "hair"){
+    const gapY = rand(120,H-120), gapH = rand(110,150) + DIFF.gapBonus;
+    ents.push({k:"hair", x:W+30, gapY, gapH, ph:rand(0,7)});
+  } else if (t === "plunger"){
+    ents.push({k:"plunger", x:W+40, y:rand(90,H-90), baseY:0, ph:rand(0,7), amp:rand(70,130)});
+    ents[ents.length-1].baseY = ents[ents.length-1].y;
+  } else if (t === "rock"){
+    const big = chance(0.35);
+    ents.push({k:"rock", x:W+40, y:rand(70,H-70), r: big?30:20, vy:rand(-10,10), big});
+  } else if (t === "log"){
+    ents.push({k:"log", x:W+80, y:rand(90,H-90), w:46, h:15, vy:rand(-6,6)});
+  } else if (t === "hook"){
+    const baseY = rand(58, H*0.5);
+    ents.push({k:"hook", x:W+40, baseY, y:baseY, ph:rand(0,7), amp:rand(28,70), r:12});
+  }
+  // corn sprinkled with most spawns
+  if (chance(DIFF.cornFreq)){
+    const n = chance(0.25)?3:1;
+    const cy = rand(70,H-70);
+    for (let i=0;i<n;i++)
+      ents.push({k:"corn", x:W+60+i*26, y:cy + Math.sin(i)*14, r:9, vy:0, eaten:false, born:0});
+  }
+}
+
+function spawnRat(){
+  const fromTop = chance(0.5);
+  ents.push({k:"rat", x:W+30, y: fromTop?-20:H+20, tx:0, ty:player.y, vx:-rand(120,170), state:0, bite:0});
+}
+
+function spawnPower(){
+  const r = Math.random();
+  let kind = r<0.45?"corn4": r<0.7?"antacid": r<0.9?"soap":"sauce";
+  if (kind==="corn4"){ // little health pack cluster
+    const cy = rand(80,H-80);
+    for(let i=0;i<4;i++) ents.push({k:"corn",x:W+50+i*22,y:cy+Math.sin(i*1.3)*18,r:9,vy:0,eaten:false,born:0});
+    return;
+  }
+  ents.push({k:"power", kind, x:W+40, y:rand(90,H-90), r:18, bob:rand(0,6)});
+}
+
+// ---------- THE CLOGFATHER (turd boss) ----------
+// Guards the seam between the sewer and the river. Two phases on a loop:
+//   ATTACK      — looms on the right (out of reach), lobs turd-shots you dodge.
+//   VULNERABLE  — clogs up, drifts into reach, exposes a glowing corn weak spot.
+//                 Ram the corn to hurt it. Body can't hurt you while it's stunned.
+const BOSS_ATTACK_X = W*0.75;
+const BOSS_VULN_X   = W*0.40;
+function startBoss(){
+  bossActive = true;
+  distance = BOSS_DISTANCE;                       // freeze the run at the gate
+  ents = ents.filter(e => e.k === "corn" && !e.fired);
+  boss = { hp:100, maxhp:100, x:W+200, y:H*0.5, phase:"intro", timer:2.4,
+           bob:0, iframe:0, hitFlash:0, shootT:0, wsX:0, wsY:0, bodyR:70 };
+  zoneName = {txt:"⚠ THE CLOGFATHER ⚠", t:3.2};
+  shake = 12;
+  try { Music.playRandom(); } catch(e){}
+}
+function bossShoot(){
+  const b = boss;
+  const n = 3 + Math.min(3, Math.floor(DIFF.level/3));   // 3..6 pellets
+  const spread = 0.62;
+  for (let i=0;i<n;i++){
+    const frac = n>1 ? i/(n-1) : 0.5;
+    const ang  = Math.PI - spread/2 + frac*spread + rand(-0.05,0.05);
+    const spd  = rand(205,255) + DIFF.level*8;
+    const big  = chance(0.22);
+    ents.push({k:"turdshot", fired:true, x:b.x-46, y:b.y+rand(-28,28),
+      vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*1.15,
+      r: big?20:13, big, spin:rand(0,7)});
+  }
+  if (chance(0.55)){   // toss a mercy kernel to eat
+    ents.push({k:"corn", fired:true, x:b.x-46, y:b.y+rand(-70,70), r:9,
+      vx:-rand(150,205), vy:rand(-45,45), eaten:false, born:0});
+  }
+  burst(b.x-34, b.y, "#5b3a1e", 8, 130);
+}
+function bossHit(){
+  const b = boss;
+  b.hp -= 22;
+  b.iframe = 0.5;
+  b.hitFlash = 1;
+  player.vy = -320;                              // knock the fish clear
+  player.iframe = Math.max(player.iframe, 0.35);
+  burst(b.wsX, b.wsY, "#ffd34e", 16, 240);
+  burst(b.wsX, b.wsY, "#7a4a22", 10, 180);
+  shake = Math.max(shake, 9);
+  if (b.hp <= 0){ b.hp = 0; bossDie(); }
+}
+function bossDie(){
+  boss.phase = "dying"; boss.timer = 2.0;
+  shake = 22; flash = Math.min(1, flash + 0.5);
+  burst(boss.x, boss.y, "#ffd34e", 30, 330);
+  burst(boss.x, boss.y, "#7a4a22", 26, 280);
+  ents = ents.filter(e => e.k !== "turdshot");
+  zoneName = {txt:"THE CLOGFATHER IS DOWN!", t:3.0};
+}
+function finishBoss(){
+  bossActive = false; bossDefeated = true; boss = null;
+  distance = BOSS_DISTANCE + 2;                  // nudge into the river
+  scroll = 200; lastZone = "";                   // let the river zone announce itself
+  player.hp = clamp(player.hp + 30, 0, player.maxhp);
+  try { Music.playRandom(); } catch(e){}
+}
+function updateBoss(dt){
+  const b = boss;
+  b.bob += dt;
+  b.iframe   = Math.max(0, b.iframe - dt);
+  b.hitFlash = Math.max(0, b.hitFlash - dt*3);
+
+  if (b.phase === "intro"){
+    b.x += (BOSS_ATTACK_X - b.x) * Math.min(1, dt*2.2);
+    b.timer -= dt;
+    if (b.timer <= 0){ b.phase="attack"; b.timer=5.2; b.shootT=0.7; }
+  } else if (b.phase === "attack"){
+    b.x += (BOSS_ATTACK_X - b.x) * Math.min(1, dt*3);
+    b.y  = H*0.5 + Math.sin(b.bob*1.15)*95;
+    b.timer  -= dt;
+    b.shootT -= dt;
+    if (b.shootT <= 0){ bossShoot(); b.shootT = clamp(1.15 - DIFF.level*0.05, 0.5, 1.15); }
+    if (b.timer <= 0){ b.phase="vulnerable"; b.timer=3.6; }
+  } else if (b.phase === "vulnerable"){
+    b.x += (BOSS_VULN_X - b.x) * Math.min(1, dt*2.4);
+    b.y += (H*0.5      - b.y) * Math.min(1, dt*2);
+    b.timer -= dt;
+    b.wsX = b.x - 96;
+    b.wsY = b.y + Math.sin(b.bob*2.2)*42;
+    if (b.iframe<=0 && dist2(player.x,player.y,b.wsX,b.wsY) < (player.r*0.82+30)**2) bossHit();
+    if (b.timer <= 0){ b.phase="attack"; b.timer=5.0; b.shootT=0.5; }
+  } else if (b.phase === "dying"){
+    b.timer -= dt;
+    if (chance(0.6)) burst(b.x+rand(-60,60), b.y+rand(-70,70), chance(0.5)?"#7a4a22":"#ffd34e", 6, 220);
+    if (b.timer <= 0){ finishBoss(); }
+  }
+}
+
+// ---------- particles ----------
+function burst(x,y,color,n,spd){
+  for(let i=0;i<n;i++){
+    const a = rand(0,Math.PI*2), s = rand(spd*0.3,spd);
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.3,.7),max:.7,
+      r:rand(2,5),color});
+  }
+}
+function bubble(){
+  parts.push({x:rand(0,W),y:H+10,vx:rand(-6,6),vy:rand(-30,-60),life:rand(1.5,3.2),max:3.2,
+    r:rand(2,7),color:"bubble"});
+}
+
+// ---------- damage ----------
+function hurt(amount, fx, fy, cause){
+  if (player.iframe>0 || player.bubble>0) return;
+  if (player.shield>0){ // antacid eats one hit, bounce
+    player.shield = 0;
+    player.iframe = 0.6;
+    player.vy = -260;
+    burst(player.x,player.y,"#bfe9ff",18,260);
+    shake = Math.max(shake,8);
+    return;
+  }
+  player.hp -= amount * DIFF.dmg;
+  player.iframe = DIFF.iframe;
+  flash = Math.min(1, flash + amount/60);
+  shake = Math.max(shake, clamp(amount*0.4,5,16));
+  burst(fx||player.x, fy||player.y, "#7a4a22", 14, 200);
+  if (player.hp <= 0){ player.hp = 0; die(cause||"clog"); }
+}
+
+const EPITAPHS = {
+  clog:   ["Reginald was last seen near the wastewater intake.\nWe'll tell the kids he went to live on a farm.",
+           "Cause of death: the brown stuff.\nA noble fish, a grim end."],
+  rat:    ["A sewer rat got him.\nNature is metal, and also disgusting.",
+           "Reginald lost a fight with a rat the size of a loaf.\nRest in pieces."],
+  drown:  ["The water finally turned. Reginald floats, belly to the pipe lid.",
+           "Poisoned by the pipes. So close. So very crusty."],
+  tp:     ["Smothered by a wet toilet-paper blob.\nNot the legend he deserved.",
+           "Reginald entered the TP cloud and did not exit.\nA soft, papery doom."],
+  grate:  ["Reginald met the drain grate face-first.\nThe grate won.",
+           "Filtered out by the treatment plant.\nWorking as intended, sadly."],
+  boss:   ["THE CLOGFATHER made Reginald an offer he couldn't survive.\nSo close to the river, too.",
+           "Reginald challenged the porcelain throne's champion — and lost.\nThe sewer keeps its king."],
+  rock:   ["Reginald met a river rock at full current.\nThe rock is doing fine, thanks for asking.",
+           "Dashed upon the rocks. A very scenic way to go belly-up."],
+  log:    ["Flattened by a floating log. Timber.\nReginald never saw the river for the trees.",
+           "A waterlogged log logged Reginald's final swim."],
+  hook:   ["Reginald got hooked. Someone upstream is having fish for dinner.",
+           "Line, hook, and sinker. So close to freedom, so very reeled in."],
+};
+function pickEpitaph(cause){
+  const arr = EPITAPHS[cause] || EPITAPHS.clog;
+  return arr[(Math.random()*arr.length)|0];
+}
+
+let deathCause = "clog";
+function die(cause){
+  if (player.dead) return;
+  player.dead = true;
+  deathCause = cause;
+  shake = 14;
+  Music.stop();
+  burst(player.x,player.y,"#ff8a3d",26,300);
+  burst(player.x,player.y,"#ffd34e",18,220);
+  setTimeout(()=>{
+    state = STATE.DEAD;
+    best = Math.max(best, Math.floor(distance));
+    document.getElementById('dead-dist').textContent = Math.floor(distance);
+    document.getElementById('dead-corn').textContent = cornEaten;
+    document.getElementById('dead-best').textContent = "Best: " + best + " m";
+    document.getElementById('epitaph').textContent = pickEpitaph(cause);
+    show(elDead);
+  }, 650);
+}
+
+function win(){
+  state = STATE.WIN;
+  Music.stop();
+  best = Math.max(best, WIN_DISTANCE);
+  const score = WIN_DISTANCE + cornEaten*25 + Math.max(0, Math.floor(2000 - runTime*10));
+  document.getElementById('win-time').textContent = runTime.toFixed(1);
+  document.getElementById('win-corn').textContent = cornEaten;
+  document.getElementById('win-score').textContent = score;
+  show(elWin);
+}
+
+// ---------- endings ----------
+let ending = null, endingT = 0, endingPhase = 0, endingRevealed = false;
+const easeOut = t => 1 - (1-t)*(1-t);
+
+function chooseEnding(kind){
+  ending = kind; endingT = 0; endingPhase = 0; endingRevealed = false;
+  parts = []; shake = 0;
+  state = STATE.ENDING;
+  show(null);
+}
+
+function updateEnding(dt){
+  endingT += dt;
+  shake = Math.max(0, shake - dt*30);
+
+  if (ending === 'cave'){
+    if (endingPhase===0 && endingT >= 1.7){ endingPhase = 1; endingT = 0; shake = 18; parts = []; }
+    if (endingPhase===1){
+      if (chance(0.9)){
+        parts.push({x: W*0.5+rand(-130,130), y: H*0.62, vx: rand(-140,140), vy: rand(-280,-90),
+          life: rand(.4,.95), max:.95, r: rand(2,5), color:"#dff3ff"});
+      }
+      if (endingT > 0.3) shake = Math.max(shake, 4 + Math.abs(Math.sin(endingT*40))*4);
+    }
+  } else if (ending === 'shark'){
+    if (endingT >= 2.2 && endingT - dt < 2.2){
+      shake = 16;
+      for (let i=0;i<22;i++){ const a=rand(0,7);
+        parts.push({x:W*0.5, y:H*0.5, vx:Math.cos(a)*rand(60,280), vy:Math.sin(a)*rand(60,280),
+          life:rand(.4,.8), max:.8, r:rand(2,5), color:"#ffd34e"}); }
+    }
+  }
+
+  for (const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.life-=dt; p.vy+=320*dt; p.vx*=0.98; }
+  parts = parts.filter(p=>p.life>0);
+
+  let ready;
+  if (ending === 'cave')      ready = (endingPhase===1 && endingT > 2.6);
+  else if (ending === 'shark') ready = endingT > 3.4;
+  else                         ready = endingT > 3.4;   // shell
+  if (!endingRevealed && ready) revealEnding();
+}
+
+function revealEnding(){
+  endingRevealed = true;
+  const data = {
+    shell: ["HOME SWEET SHELL 🐚",
+      "Reginald found the perfect seashell and turned it into a cozy little home. He lives happily ever after — still smelling faintly of the sewer, forever. The end."],
+    cave:  ["WRONG CAVE 🩷😱",
+      "That cozy pink cave that 'smelled just like home'? It was already occupied. Somewhere, a woman's beach day is thoroughly ruined. Reginald, blissfully oblivious, has never felt more at home."],
+    shark: ["MEET THE LOCALS 🦈",
+      "Reginald swam out to introduce himself to the ocean's residents. The residents introduced him to the food chain. A short life — but at least it ended in the sea, not the sewer."]
+  };
+  const d = data[ending] || data.shell;
+  document.getElementById('end-title').textContent = d[0];
+  document.getElementById('end-text').textContent  = d[1];
+  show(elEnd);
+}
+
+// --- ending renderers ---
+function drawEnding(){
+  if (ending === 'cave')  return drawEndingCave();
+  if (ending === 'shark') return drawEndingShark();
+  return drawEndingShell();
+}
+
+function drawOceanBG(){
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,"#3fc3ec"); g.addColorStop(1,"#0d5e7e");
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  ctx.save(); ctx.globalAlpha=0.08; ctx.fillStyle="#eaffff";
+  for (let i=0;i<5;i++){ const x=120+i*170+Math.sin(endingT*0.3+i)*20;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+40,0); ctx.lineTo(x+90,H); ctx.lineTo(x+30,H); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  ctx.fillStyle="#e6cf8f"; ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(0,H-46);
+  for (let x=0;x<=W;x+=40) ctx.lineTo(x, H-46+Math.sin(x*0.03)*8);
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#d8bd76"; ctx.fillRect(0,H-8,W,8);
+  ctx.strokeStyle="rgba(255,255,255,0.35)"; ctx.lineWidth=1.5;
+  for (let i=0;i<14;i++){ const t=(endingT*40+i*57)%(H+40);
+    const x=(i*73+Math.sin((endingT+i)*1.3)*14)%W, y=H-t;
+    ctx.beginPath(); ctx.arc(x,y,2+(i%3),0,7); ctx.stroke(); }
+}
+
+function drawFishAt(x,y,s,tilt,face){
+  face = face||1;
+  ctx.save(); ctx.translate(x,y); ctx.scale(face*s, s); ctx.rotate(tilt||0);
+  const wig = Math.sin(endingT*12)*4;
+  ctx.fillStyle="#e8772a";
+  ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-30,-10+wig); ctx.lineTo(-26,0); ctx.lineTo(-30,10+wig); ctx.closePath(); ctx.fill();
+  const bg=ctx.createLinearGradient(0,-14,0,14); bg.addColorStop(0,"#ffb347"); bg.addColorStop(1,"#f3852a");
+  ctx.fillStyle=bg; ctx.beginPath(); ctx.ellipse(0,0,16,12,0,0,7); ctx.fill();
+  ctx.fillStyle="#f3852a"; ctx.beginPath(); ctx.moveTo(-2,-11); ctx.quadraticCurveTo(2,-20+wig*0.5,10,-9); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="rgba(255,240,200,0.5)"; ctx.beginPath(); ctx.ellipse(2,4,9,5,0,0,7); ctx.fill();
+  ctx.fillStyle="#e8772a"; ctx.beginPath(); ctx.moveTo(2,4); ctx.quadraticCurveTo(-2,12+wig*0.4,8,10); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(8,-3,4.5,0,7); ctx.fill();
+  ctx.fillStyle="#10171f"; ctx.beginPath(); ctx.arc(9.5,-3,2.3,0,7); ctx.fill();
+  ctx.restore();
+}
+
+function drawMiniFish(x,y,col){
+  ctx.save(); ctx.translate(x,y); ctx.fillStyle=col;
+  ctx.beginPath(); ctx.ellipse(0,0,9,6,0,0,7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(7,0); ctx.lineTo(15,-5); ctx.lineTo(15,5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#10171f"; ctx.beginPath(); ctx.arc(-4,-1,1.5,0,7); ctx.fill();
+  ctx.restore();
+}
+
+function drawHeart(x,y,s,color){
+  ctx.save(); ctx.translate(x,y); ctx.scale(s/10,s/10); ctx.fillStyle=color;
+  ctx.beginPath(); ctx.moveTo(0,3);
+  ctx.bezierCurveTo(-6,-4,-10,3,0,10);
+  ctx.bezierCurveTo(10,3,6,-4,0,3); ctx.fill(); ctx.restore();
+}
+
+function drawScallop(x,y,r){
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle="#ffd9c2"; ctx.strokeStyle="#e08f7a"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,8); ctx.arc(0,8,r,Math.PI*1.04,Math.PI*1.96,false); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle="#eaa089";
+  for (let i=-3;i<=3;i++){ const a=-Math.PI/2 + i*0.28;
+    ctx.beginPath(); ctx.moveTo(0,8); ctx.lineTo(Math.cos(a)*r*0.96, 8+Math.sin(a)*r*0.96); ctx.stroke(); }
+  ctx.fillStyle="#e08f7a"; ctx.beginPath(); ctx.arc(0,8,7,0,7); ctx.fill();
+  ctx.fillStyle="rgba(60,20,30,0.40)"; ctx.beginPath(); ctx.ellipse(0,7,r*0.55,9,0,0,Math.PI); ctx.fill();
+  ctx.restore();
+}
+
+function drawEndingShell(){
+  drawOceanBG();
+  const t = endingT, shellX = W*0.62, shellY = H-92;
+  drawScallop(shellX, shellY, 72);
+  if (t < 1.9){
+    const ax = Math.min(1, t/1.8);
+    const fx = -40 + (shellX-72 - (-40))*easeOut(ax);
+    const fy = shellY-12 + Math.sin(t*3)*6;
+    drawFishAt(fx, fy, 1.1, Math.sin(t*4)*0.1, 1);
+  } else {
+    drawFishAt(shellX-34, shellY-8 + Math.sin(t*2)*3, 1.0, 0, 1);
+    for (let i=0;i<3;i++){ const ht=(t-1.9+i*0.6)%2;
+      if (ht>0){ const hy=shellY-34-ht*60, hx=shellX-34+Math.sin(ht*4+i)*12;
+        drawHeart(hx, hy, 9*(1-ht/2)+4, `rgba(255,120,160,${Math.max(0,1-ht/2)})`); } }
+  }
+}
+
+function drawShark(x,y,t,chomp){
+  ctx.save(); ctx.translate(x,y);
+  const open = chomp ? Math.max(0, 0.5 - (t-2.2)*5) : 0.5;
+  ctx.fillStyle="#6b7c88";
+  ctx.beginPath();
+  ctx.moveTo(120,0);
+  ctx.quadraticCurveTo(60,-55,-40,-30);
+  ctx.quadraticCurveTo(-70,-6,-80,0);
+  ctx.quadraticCurveTo(-70,8,-40,30);
+  ctx.quadraticCurveTo(60,55,120,0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#aeb9c2";
+  ctx.beginPath(); ctx.moveTo(-50,16); ctx.quadraticCurveTo(40,46,110,6); ctx.quadraticCurveTo(40,30,-50,16); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#6b7c88";
+  ctx.beginPath(); ctx.moveTo(115,-4); ctx.lineTo(152,-36); ctx.lineTo(140,0); ctx.lineTo(152,32); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(20,-38); ctx.lineTo(48,-80); ctx.lineTo(62,-34); ctx.closePath(); ctx.fill();
+  const m = open*46;
+  ctx.fillStyle="#3a0d12";
+  ctx.beginPath(); ctx.moveTo(-80,0); ctx.lineTo(-26,-m*0.5); ctx.lineTo(-16,0); ctx.lineTo(-26,m*0.7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#fff";
+  for (let i=0;i<6;i++){ const tx=-74+i*9;
+    ctx.beginPath(); ctx.moveTo(tx,-m*0.32); ctx.lineTo(tx+4,-m*0.32+6); ctx.lineTo(tx+8,-m*0.32); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tx, m*0.42); ctx.lineTo(tx+4, m*0.42-6); ctx.lineTo(tx+8, m*0.42); ctx.closePath(); ctx.fill(); }
+  ctx.fillStyle="#10171f"; ctx.beginPath(); ctx.arc(-40,-12,4,0,7); ctx.fill();
+  ctx.strokeStyle="#566570"; ctx.lineWidth=2;
+  for (let i=0;i<3;i++){ ctx.beginPath(); ctx.moveTo(-6+i*10,-18); ctx.quadraticCurveTo(-10+i*10,0,-6+i*10,18); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawEndingShark(){
+  drawOceanBG();
+  const t = endingT;
+  for (let i=0;i<4;i++){ const fx=(W*0.2+i*120+t*22)%(W+40)-20, fy=H*0.34+i*42+Math.sin(t*2+i)*10;
+    drawMiniFish(fx, fy, i%2?'#7fd1ff':'#9cf0c0'); }
+  if (t < 2.32){
+    drawFishAt(W*0.5+Math.sin(t*3)*6, H*0.5, 1.1, Math.sin(t*2)*0.08, 1);
+  } else {
+    for (let i=0;i<6;i++){ const bt=(t-2.32)+i*0.1;
+      ctx.fillStyle=`rgba(255,255,255,${Math.max(0,0.6-bt)})`;
+      ctx.beginPath(); ctx.arc(W*0.5+Math.sin(i)*20, H*0.5-bt*40, 3+i%3,0,7); ctx.fill(); }
+  }
+  const sx = (W+150) + (W*0.52 - (W+150))*easeOut(Math.min(1, t/2.3));
+  drawShark(sx, H*0.5, t, t>=2.2);
+}
+
+function drawScreamingGirl(cx, waterY, t){
+  const sway = Math.sin(t*18)*8;
+  ctx.save(); ctx.translate(cx+sway, 0);
+  ctx.strokeStyle="#f0c9a8"; ctx.lineWidth=14; ctx.lineCap="round";
+  const lh = waterY-60-Math.sin(t*20)*22, rh = waterY-50-Math.cos(t*20)*24;
+  ctx.beginPath(); ctx.moveTo(-46, waterY-8); ctx.lineTo(-88, lh); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(46, waterY-8);  ctx.lineTo(92, rh);  ctx.stroke();
+  ctx.fillStyle="#f0c9a8";
+  ctx.beginPath(); ctx.arc(-88, lh, 11, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(92, rh, 11, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, waterY-4, 62, 28, 0, Math.PI, 0, true); ctx.fill();
+  ctx.strokeStyle="#e0457a"; ctx.lineWidth=5;
+  ctx.beginPath(); ctx.moveTo(-20,waterY-18); ctx.lineTo(-14,waterY-30);
+  ctx.moveTo(20,waterY-18); ctx.lineTo(14,waterY-30); ctx.stroke();
+  ctx.fillStyle="#f0c9a8"; ctx.fillRect(-12, waterY-58, 24, 26);
+  ctx.fillStyle="#6b3f23"; ctx.beginPath(); ctx.arc(0, waterY-92, 52, 0, 7); ctx.fill();
+  ctx.strokeStyle="#5a3420"; ctx.lineWidth=6;
+  for (let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(i*22, waterY-92);
+    ctx.quadraticCurveTo(i*30, waterY-58, i*26+sway*0.3, waterY-36); ctx.stroke(); }
+  ctx.fillStyle="#fad7b8"; ctx.beginPath(); ctx.arc(0, waterY-92, 40, 0, 7); ctx.fill();
+  ctx.fillStyle="#fff";
+  ctx.beginPath(); ctx.ellipse(-15, waterY-100, 11, 14, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(15, waterY-100, 11, 14, 0, 0, 7); ctx.fill();
+  ctx.fillStyle="#1a1a22";
+  ctx.beginPath(); ctx.arc(-15, waterY-98, 5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(15, waterY-98, 5, 0, 7); ctx.fill();
+  ctx.strokeStyle="#5a3420"; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(-26,waterY-118); ctx.lineTo(-6,waterY-120);
+  ctx.moveTo(26,waterY-118); ctx.lineTo(6,waterY-120); ctx.stroke();
+  ctx.fillStyle="#7a1f2a";
+  ctx.beginPath(); ctx.ellipse(0, waterY-74, 13, 18+Math.sin(t*30)*3, 0, 0, 7); ctx.fill();
+  ctx.fillStyle="#e0667a";
+  ctx.beginPath(); ctx.ellipse(0, waterY-68, 7, 6, 0, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+function drawEndingCave(){
+  const t = endingT;
+  if (endingPhase === 0){
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,"#ff9ec4"); g.addColorStop(1,"#b84a78");
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    const cx=W*0.78, cy=H*0.5;
+    ctx.fillStyle="#7a2a4e"; ctx.beginPath(); ctx.ellipse(cx,cy,92,124,0,0,7); ctx.fill();
+    ctx.fillStyle="#5a1838"; ctx.beginPath(); ctx.ellipse(cx+10,cy,56,86,0,0,7); ctx.fill();
+    ctx.strokeStyle="rgba(255,190,215,0.5)"; ctx.lineWidth=2;
+    for (let i=0;i<3;i++){ const yy=cy-40+i*40+Math.sin(t*3+i)*6;
+      ctx.beginPath(); ctx.moveTo(cx-92,yy); ctx.quadraticCurveTo(cx-130,yy-10,cx-165,yy); ctx.stroke(); }
+    const ax = Math.min(1, t/1.7);
+    const fx = -40 + (cx+18 - (-40))*easeOut(ax);
+    const fy = cy + Math.sin(t*3)*8, s = 1.1*(1-0.72*ax);
+    if (ax < 1) drawFishAt(fx, fy, Math.max(0.2,s), 0, 1);
+    ctx.fillStyle="rgba(255,255,255,0.9)"; ctx.font="italic 20px monospace"; ctx.textAlign="center";
+    ctx.fillText("...this one smells just like home 🩷", W/2, H-40);
+  } else {
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,"#bfe9ff"); g.addColorStop(0.6,"#7fcdee");
+    g.addColorStop(0.62,"#2b8fc0"); g.addColorStop(1,"#10617e");
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    const waterY = H*0.62;
+    drawScreamingGirl(W*0.5, waterY, t);
+    ctx.strokeStyle="rgba(255,255,255,0.6)"; ctx.lineWidth=3;
+    ctx.beginPath();
+    for (let x=0;x<=W;x+=16){ const y=waterY+Math.sin(x*0.05+t*8)*6; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    ctx.stroke();
+    drawParticles();
+    const a = 0.6+0.4*Math.abs(Math.sin(t*30));
+    ctx.save(); ctx.translate(W*0.5, H*0.2); ctx.rotate(Math.sin(t*20)*0.03);
+    ctx.font="bold 54px monospace"; ctx.textAlign="center";
+    ctx.lineWidth=4; ctx.strokeStyle="#c0263a"; ctx.fillStyle=`rgba(255,255,255,${a})`;
+    ctx.strokeText("AAAAAAAH!!", 0, 0); ctx.fillText("AAAAAAAH!!", 0, 0);
+    ctx.restore();
+  }
+}
+
+// ---------- update ----------
+function update(dt){
+  if (state === STATE.ENDING){ updateEnding(dt); return; }
+  if (state !== STATE.PLAY) return;
+  runTime += dt;
+
+  const z = currentZone();
+  let curScroll;
+  if (bossActive){
+    // THE CLOGFATHER dams the pipe — the run holds while the water churns
+    curScroll = 70;
+    bgFlow += curScroll * dt;
+  } else {
+    // scroll ramps with distance, sprints through the outflow & the rapids
+    let base = 200 + Math.min(distance*0.22, 230);
+    if (z.sprint) base += 120;
+    let target = base * DIFF.scroll;
+    scroll += (target - scroll) * Math.min(1, dt*1.5);
+    curScroll = scroll * (player.boost>0 ? 1.55 : 1);
+    distance += curScroll * dt * 0.052;
+    bgFlow += curScroll * dt;
+
+    if (distance >= WIN_DISTANCE){ win(); return; }
+    // end of the sewer → the turd boss blocks the way to the river
+    if (!bossDefeated && distance >= BOSS_DISTANCE){ startBoss(); }
+
+    // zone / level announce
+    if (z.name !== lastZone){ lastZone = z.name; zoneName = {txt:z.name, t:2.6}; curLevel = z.level; }
+  }
+  if (zoneName) zoneName.t -= dt;
+  if (nowPlaying) nowPlaying.t -= dt;
+
+  // ---- player physics ----
+  const GRAV = 900, THR = -1500, MAXV = 520;
+  player.vy += (thrust ? THR : GRAV) * dt;
+  player.vy = clamp(player.vy, -MAXV, MAXV);
+  // soap bubble = floaty & slippery
+  if (player.bubble>0) player.vy *= 0.985;
+  player.y += player.vy * dt;
+  // wall scrape
+  const top = 24, bot = H-24;
+  if (player.y < top){ player.y = top; if(player.vy<0)player.vy=0; if(player.bubble<=0&&player.iframe<=0&&runTime>1){player.hp-=40*dt*DIFF.dmg; if(chance(0.5))burst(player.x,top,"#3a2a18",2,60);} }
+  if (player.y > bot){ player.y = bot; if(player.vy>0)player.vy=0; if(player.bubble<=0&&player.iframe<=0&&runTime>1){player.hp-=40*dt*DIFF.dmg; if(chance(0.5))burst(player.x,bot,"#3a2a18",2,60);} }
+  player.tilt = clamp(player.vy/520, -1, 1);
+  player.wig += dt*14;
+
+  // timers
+  player.iframe = Math.max(0, player.iframe - dt);
+  player.bubble = Math.max(0, player.bubble - dt);
+  player.boost  = Math.max(0, player.boost - dt);
+  // passive poison drain — filthy in the sewer, gentle in the clean-ish river
+  const poison = z.clean ? 0.75 : (2.0 + z.intensity*2.2);
+  player.hp -= poison * DIFF.drain * dt;
+  if (player.hp <= 0){ player.hp=0; die(bossActive?"boss":"drown"); return; }
+
+  // ---- boss loop, or normal spawns ----
+  if (bossActive){
+    updateBoss(dt);
+  } else {
+    spawnTimer -= dt;
+    const baseGap = clamp((1.35 - z.intensity*0.7) * DIFF.spawn, 0.45, 3.4);
+    if (spawnTimer <= 0){ spawn(z); spawnTimer = rand(baseGap*0.7, baseGap*1.25); }
+
+    if (z.rats){
+      ratTimer -= dt;
+      if (ratTimer <= 0){ spawnRat(); ratTimer = rand(2.2, 4.0) * DIFF.ratGap; }
+      if (ratTimer > 50) ratTimer = rand(1.5,3.0) * DIFF.ratGap;
+    } else { ratTimer = 999; }
+
+    powerTimer -= dt;
+    if (powerTimer <= 0){ spawnPower(); powerTimer = rand(7,11); }
+  }
+
+  // ---- entities ----
+  for (const e of ents){
+    if (e.fired){                       // boss shots & mercy corn ride their own vector
+      e.x += e.vx*dt; e.y += e.vy*dt;
+      e.spin = (e.spin||0) + dt*7;
+      if (e.k==="corn") e.born += dt;
+      continue;
+    }
+    if (e.k === "rat"){
+      // home toward player then streak left
+      if (e.state===0){
+        const dy = player.y - e.y;
+        e.y += clamp(dy, -260*dt, 260*dt) + (dy>0?160*dt:-160*dt);
+        e.x += e.vx*dt;
+        if (Math.abs(e.y-player.y)<30 || e.x < player.x+60) e.state=1;
+      } else {
+        e.x += (e.vx-80)*dt;
+        e.y += Math.sin(runTime*20)*1.5;
+      }
+    } else if (e.k === "plunger"){
+      e.x -= curScroll*dt;
+      e.y = e.baseY + Math.sin((runTime+e.ph)*3.2)*e.amp;
+    } else if (e.k === "hook"){
+      e.x -= curScroll*dt;
+      e.y = e.baseY + Math.sin((runTime+e.ph)*1.6)*e.amp;
+    } else if (e.k === "hair"){
+      e.x -= curScroll*dt;
+    } else {
+      e.x -= curScroll*dt;
+      if (e.vy) e.y += e.vy*dt;
+      if (e.k==="tp"){ e.grow = Math.min(1, e.grow + dt*0.8 * (e.x < W*0.7 ? 1:0)); }
+      if (e.k==="corn" && !e.eaten){ e.born += dt; }
+      if (e.k==="power"){ e.y += Math.sin((runTime+e.bob)*2)*0.6; }
+    }
+    // bound bounce for floaty ones (rocks & logs ricochet off the river walls too)
+    if (e.vy && (e.k==="poop"||e.k==="tp"||e.k==="rock"||e.k==="log")){
+      const br = e.r || e.h || 18;
+      if (e.y<br+20){e.y=br+20;e.vy*=-1;} if(e.y>H-br-20){e.y=H-br-20;e.vy*=-1;}
+    }
+  }
+
+  // ---- collisions ----
+  const px=player.x, py=player.y, pr=player.r*0.82;
+  for (const e of ents){
+    if (e.dead) continue;
+    if (e.k==="corn" && !e.eaten){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r+4)**2){
+        e.eaten=true; e.dead=true; cornEaten++;
+        player.hp = clamp(player.hp + 9*DIFF.cornHeal, 0, player.maxhp);
+        burst(e.x,e.y,"#ffd34e",10,140);
+      }
+      continue;
+    }
+    if (e.k==="power"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r)**2){
+        e.dead=true; applyPower(e.kind);
+      }
+      continue;
+    }
+    if (e.k==="poop"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2) hurt(e.big?34:18, e.x, e.y);
+    } else if (e.k==="turdshot"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2){ e.dead=true; hurt(e.big?26:16, e.x, e.y, "boss"); }
+    } else if (e.k==="rock"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2) hurt(e.big?30:20, e.x, e.y, "rock");
+    } else if (e.k==="log"){
+      if (Math.abs(px-e.x) < e.w+pr && Math.abs(py-e.y) < e.h+pr) hurt(26, e.x, e.y, "log");
+    } else if (e.k==="hook"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r)**2) hurt(24, e.x, e.y, "hook");
+    } else if (e.k==="tp"){
+      const rr = e.r*(1+e.grow*0.9);
+      if (dist2(px,py,e.x,e.y) < (pr+rr*0.8)**2){ if(player.iframe<=0&&player.bubble<=0){deathCheck("tp",22);} }
+    } else if (e.k==="rat"){
+      if (dist2(px,py,e.x,e.y) < (pr+16)**2){ e.bite+=dt; deathCheck("rat",24,e.x,e.y); e.dead=true; }
+    } else if (e.k==="grate" || e.k==="hair"){
+      // wall with a gap: collide if within x-band AND outside the gap
+      const halfW = e.k==="grate"?14:26;
+      if (Math.abs((e.x)-px) < halfW+pr){
+        const inGap = py > e.gapY - e.gapH/2 + pr*0.5 && py < e.gapY + e.gapH/2 - pr*0.5;
+        if (!inGap){ deathCheck(e.k==="grate"?"grate":"clog", 26, e.x, py); }
+      }
+    } else if (e.k==="plunger"){
+      if (dist2(px,py,e.x,e.y) < (pr+18)**2) hurt(28,e.x,e.y);
+    }
+  }
+
+  // cull (boss shots also die once they streak off the top or bottom)
+  ents = ents.filter(e=> !e.dead && e.x > -80 && e.x < W+300 && !(e.fired && (e.y<-160||e.y>H+160)));
+
+  // particles
+  for (const p of parts){
+    p.x += p.vx*dt; p.y += p.vy*dt; p.life -= dt;
+    if (p.color!=="bubble"){ p.vy += 320*dt; p.vx*=0.98; }
+  }
+  parts = parts.filter(p=>p.life>0);
+  if (chance(0.5)) bubble();
+
+  shake = Math.max(0, shake - dt*30);
+  flash = Math.max(0, flash - dt*2.2);
+}
+
+function dist2(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
+function deathCheck(cause,dmg,fx,fy){
+  // big obstacles can outright kill if low, else chunk damage; here treat as heavy hit
+  hurt(dmg,fx,fy,cause);
+}
+
+function applyPower(kind){
+  if (kind==="antacid"){ player.shield = 1; burst(player.x,player.y,"#bfe9ff",16,180); }
+  else if (kind==="soap"){ player.bubble = 4.5; player.iframe=Math.max(player.iframe,4.5); burst(player.x,player.y,"#cdeaff",22,200); }
+  else if (kind==="sauce"){ player.boost = 3.5; player.hp=clamp(player.hp+4,0,player.maxhp); burst(player.x,player.y,"#ff6a3d",22,240); }
+}
+
+// ---------- render ----------
+function draw(){
+  if (state === STATE.ENDING){
+    ctx.save();
+    if (shake>0) ctx.translate(rand(-shake,shake), rand(-shake,shake));
+    drawEnding();
+    ctx.restore();
+    return;
+  }
+  const z = currentZone();
+  ctx.save();
+  // screen shake
+  if (shake>0) ctx.translate(rand(-shake,shake), rand(-shake,shake));
+
+  // background pipe
+  drawBackground(z);
+
+  // the turd boss sits behind the fish and its projectiles
+  if (bossActive && boss) drawBoss();
+
+  // entities (behind fish: corn/power; in front: hazards roughly same layer)
+  for (const e of ents) drawEntity(e, z);
+
+  // bubbles/particles
+  drawParticles();
+
+  // player
+  if (state===STATE.PLAY || state===STATE.DEAD) drawPlayer();
+
+  ctx.restore();
+
+  // damage flash
+  if (flash>0){ ctx.fillStyle = `rgba(255,40,40,${flash*0.35})`; ctx.fillRect(0,0,W,H); }
+
+  // HUD
+  if (state===STATE.PLAY || state===STATE.DEAD) drawHUD(z);
+}
+
+function drawBackground(z){
+  // pipe interior gradient
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, shade(z.tint, 0.7));
+  g.addColorStop(0.5, z.tint);
+  g.addColorStop(1, shade(z.tint, 0.55));
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // flowing sludge stripes
+  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = z.flow; ctx.lineWidth = 3;
+  for (let i=0;i<6;i++){
+    const yy = (i*90 + (bgFlow*0.5)% 90);
+    ctx.beginPath();
+    for (let x=0;x<=W;x+=30){
+      const y = ((yy + x*0.04) % (H+80)) - 40 + Math.sin((x+bgFlow)*0.01)*8;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // pipe ridges scrolling (top & bottom)
+  ctx.fillStyle = shade(z.tint,0.4);
+  ctx.fillRect(0,0,W,22); ctx.fillRect(0,H-22,W,22);
+  ctx.fillStyle = shade(z.tint,0.30);
+  for (let x=-((bgFlow*1)%56); x<W; x+=56){
+    ctx.fillRect(x,0,28,22); ctx.fillRect(x+14,H-22,28,22);
+  }
+  // ocean glow as you near the end of the river
+  if (z.level===2 && distance > WIN_DISTANCE-400){
+    const a = clamp((distance-(WIN_DISTANCE-400))/400,0,1);
+    const og = ctx.createLinearGradient(W*0.6,0,W,0);
+    og.addColorStop(0,"rgba(43,179,224,0)");
+    og.addColorStop(1,`rgba(120,220,255,${0.5*a})`);
+    ctx.fillStyle=og; ctx.fillRect(0,0,W,H);
+  }
+}
+
+function drawEntity(e, z){
+  ctx.save();
+  if (e.k==="corn"){
+    if (e.eaten){ctx.restore();return;}
+    ctx.translate(e.x,e.y);
+    const pulse = 1+Math.sin(runTime*6+e.x)*0.08;
+    ctx.scale(pulse,pulse);
+    // glow
+    ctx.fillStyle="rgba(255,211,78,0.25)";
+    ctx.beginPath();ctx.arc(0,0,e.r*1.7,0,7);ctx.fill();
+    // kernel
+    ctx.fillStyle="#ffd34e"; ctx.strokeStyle="#caa12f"; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.ellipse(0,0,e.r*0.8,e.r,0,0,7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,0.6)";
+    ctx.beginPath();ctx.ellipse(-2,-3,2.4,4,0,0,7);ctx.fill();
+  }
+  else if (e.k==="poop"){
+    drawPoop(e.x,e.y,e.r,e.big);
+  }
+  else if (e.k==="tp"){
+    const rr=e.r*(1+e.grow*0.9);
+    ctx.translate(e.x,e.y);
+    ctx.fillStyle="rgba(244,241,232,0.9)";
+    for(let i=0;i<7;i++){const a=i/7*Math.PI*2; ctx.beginPath();
+      ctx.arc(Math.cos(a)*rr*0.5,Math.sin(a)*rr*0.5,rr*0.55,0,7);ctx.fill();}
+    ctx.fillStyle="rgba(255,255,255,0.95)";
+    ctx.beginPath();ctx.arc(0,0,rr*0.6,0,7);ctx.fill();
+    ctx.strokeStyle="rgba(200,196,182,0.7)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(0,0,rr*0.35,0,7);ctx.stroke();
+  }
+  else if (e.k==="rat"){
+    drawRat(e.x,e.y);
+  }
+  else if (e.k==="grate"){
+    drawWall(e.x,e.gapY,e.gapH,"grate",z);
+  }
+  else if (e.k==="hair"){
+    drawWall(e.x,e.gapY,e.gapH,"hair",z);
+  }
+  else if (e.k==="plunger"){
+    drawPlunger(e.x,e.y);
+  }
+  else if (e.k==="power"){
+    drawPower(e.x,e.y,e.r,e.kind);
+  }
+  else if (e.k==="turdshot"){
+    drawTurdshot(e.x,e.y,e.r,e.spin);
+  }
+  else if (e.k==="rock"){
+    drawRock(e.x,e.y,e.r);
+  }
+  else if (e.k==="log"){
+    drawLog(e.x,e.y,e.w,e.h);
+  }
+  else if (e.k==="hook"){
+    drawHook(e.x,e.y,e.r);
+  }
+  ctx.restore();
+}
+
+function drawPoop(x,y,r,big){
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="#5b3a1e";
+  // stacked swirl
+  const lobes = big?4:3;
+  for(let i=0;i<lobes;i++){
+    const yy=-r*0.5 + i*(r*0.55);
+    const rr=r*(1 - i*0.12);
+    ctx.beginPath();ctx.ellipse(0,yy,rr,rr*0.7,0,0,7);ctx.fill();
+  }
+  ctx.fillStyle="#6e4a28";
+  ctx.beginPath();ctx.ellipse(-r*0.3,-r*0.3,r*0.3,r*0.22,0,0,7);ctx.fill();
+  // stink lines
+  ctx.strokeStyle="rgba(150,180,90,0.5)";ctx.lineWidth=2;
+  for(let i=-1;i<2;i++){ctx.beginPath();
+    ctx.moveTo(i*7,-r*1.1);ctx.quadraticCurveTo(i*7+5,-r*1.4,i*7,-r*1.7);ctx.stroke();}
+  ctx.restore();
+}
+
+function drawRat(x,y){
+  ctx.save();ctx.translate(x,y);
+  // tail
+  ctx.strokeStyle="#c98b9a";ctx.lineWidth=3;ctx.beginPath();
+  ctx.moveTo(16,0);ctx.quadraticCurveTo(40,-6,46,8);ctx.stroke();
+  // body
+  ctx.fillStyle="#6b6f76";ctx.beginPath();ctx.ellipse(0,0,18,12,0,0,7);ctx.fill();
+  // head
+  ctx.beginPath();ctx.ellipse(-16,-2,9,8,0,0,7);ctx.fill();
+  // ear
+  ctx.fillStyle="#8a8f96";ctx.beginPath();ctx.arc(-14,-9,5,0,7);ctx.fill();
+  // eye
+  ctx.fillStyle="#1a0d0d";ctx.beginPath();ctx.arc(-20,-3,2,0,7);ctx.fill();
+  // teeth
+  ctx.fillStyle="#fff";ctx.fillRect(-25,0,3,4);
+  ctx.restore();
+}
+
+function drawWall(x,gapY,gapH,type,z){
+  const top0=22, bot0=H-22;
+  const gTop=gapY-gapH/2, gBot=gapY+gapH/2;
+  ctx.save();
+  if (type==="grate"){
+    ctx.fillStyle="#7d848c";ctx.strokeStyle="#4a4f55";ctx.lineWidth=2;
+    [[top0,gTop],[gBot,bot0]].forEach(([a,b])=>{
+      ctx.fillRect(x-12,a,24,b-a);ctx.strokeRect(x-12,a,24,b-a);
+      // bars
+      ctx.strokeStyle="#3a3f45";
+      for(let yy=a+8; yy<b-4; yy+=14){ctx.beginPath();ctx.moveTo(x-12,yy);ctx.lineTo(x+12,yy);ctx.stroke();}
+      ctx.strokeStyle="#4a4f55";
+    });
+    // gap glow
+    ctx.fillStyle="rgba(120,200,255,0.08)";ctx.fillRect(x-12,gTop,24,gapH);
+  } else { // hair clog
+    ctx.strokeStyle="#241a16";ctx.lineWidth=2;ctx.globalAlpha=0.95;
+    [[top0,gTop],[gBot,bot0]].forEach(([a,b])=>{
+      ctx.fillStyle="rgba(35,25,20,0.92)";ctx.fillRect(x-22,a,44,b-a);
+      for(let i=0;i<26;i++){
+        const sy=rand(a,b);
+        ctx.beginPath();ctx.moveTo(x-22,sy);
+        ctx.bezierCurveTo(x-6,sy+rand(-10,10),x+6,sy+rand(-10,10),x+22,sy+rand(-8,8));
+        ctx.stroke();
+      }
+    });
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
+
+function drawPlunger(x,y){
+  ctx.save();ctx.translate(x,y);
+  // handle
+  ctx.fillStyle="#8a5a32";ctx.fillRect(-4,-44,8,40);
+  ctx.fillStyle="#a06a3c";ctx.fillRect(-6,-50,12,8);
+  // rubber cup
+  ctx.fillStyle="#b3322b";ctx.beginPath();
+  ctx.moveTo(-18,-4);ctx.quadraticCurveTo(-18,18,0,20);
+  ctx.quadraticCurveTo(18,18,18,-4);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#8f241f";ctx.beginPath();ctx.ellipse(0,-4,18,7,0,0,7);ctx.fill();
+  ctx.restore();
+}
+
+// ---- river hazards ----
+function drawRock(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="#6b6f74";
+  ctx.beginPath();
+  ctx.moveTo(-r,0.1*r);
+  ctx.lineTo(-r*0.6,-r*0.8);
+  ctx.lineTo(r*0.1,-r);
+  ctx.lineTo(r*0.9,-r*0.4);
+  ctx.lineTo(r,r*0.35);
+  ctx.lineTo(r*0.35,r*0.95);
+  ctx.lineTo(-r*0.55,r*0.7);
+  ctx.closePath();ctx.fill();
+  ctx.fillStyle="#565a5f";
+  ctx.beginPath();ctx.ellipse(-r*0.2,r*0.25,r*0.5,r*0.3,0.3,0,7);ctx.fill();
+  ctx.fillStyle="#7d8288";
+  ctx.beginPath();ctx.ellipse(r*0.22,-r*0.35,r*0.28,r*0.18,-0.4,0,7);ctx.fill();
+  ctx.fillStyle="rgba(90,150,70,0.5)"; // river moss
+  ctx.beginPath();ctx.ellipse(-r*0.3,-r*0.42,r*0.32,r*0.14,0,0,7);ctx.fill();
+  ctx.restore();
+}
+function drawLog(x,y,w,h){
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="#6a4423";
+  ctx.beginPath();ctx.ellipse(0,0,w,h,0,0,7);ctx.fill();
+  ctx.fillStyle="#7a5330";
+  ctx.beginPath();ctx.ellipse(0,-h*0.35,w*0.94,h*0.5,0,0,7);ctx.fill();
+  ctx.strokeStyle="#4e3018";ctx.lineWidth=2;
+  for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(-w*0.72,i*h*0.42);ctx.lineTo(w*0.72,i*h*0.42);ctx.stroke();}
+  // sawn end-ring
+  ctx.fillStyle="#8a6236";ctx.beginPath();ctx.ellipse(w*0.9,0,h*0.62,h,0,0,7);ctx.fill();
+  ctx.strokeStyle="#5b3a1e";ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(w*0.9,0,h*0.36,h*0.6,0,0,7);ctx.stroke();
+  ctx.restore();
+}
+function drawHook(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  // fishing line up to the surface
+  ctx.strokeStyle="rgba(220,240,255,0.45)";ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,-y);ctx.lineTo(0,-6);ctx.stroke();
+  // steel hook
+  ctx.strokeStyle="#cdd2d8";ctx.lineWidth=4;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(0,7);ctx.arc(-6,7,6,0,Math.PI,false);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-12,7);ctx.lineTo(-7,1);ctx.stroke();     // barb
+  // wriggly worm bait
+  ctx.strokeStyle="#d06a8a";ctx.lineWidth=5;
+  ctx.beginPath();ctx.moveTo(-6,11);ctx.quadraticCurveTo(-15,16,-8,23);ctx.stroke();
+  ctx.restore();
+}
+function drawTurdshot(x,y,r,spin){
+  ctx.save();ctx.translate(x,y);ctx.rotate(spin||0);
+  ctx.fillStyle="#5b3a1e";
+  ctx.beginPath();ctx.ellipse(0,0,r,r*0.82,0,0,7);ctx.fill();
+  ctx.fillStyle="#6e4a28";
+  ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.35,0,7);ctx.fill();
+  ctx.fillStyle="#3f2814";
+  ctx.beginPath();ctx.arc(r*0.25,r*0.22,r*0.22,0,7);ctx.fill();
+  ctx.restore();
+}
+
+// ---- THE CLOGFATHER ----
+function drawBoss(){
+  const b = boss;
+  const R = b.bodyR;
+  const vuln  = (b.phase==="vulnerable");
+  const flash = b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);
+
+  if (vuln){ ctx.fillStyle="rgba(150,220,90,0.18)"; ctx.beginPath();ctx.arc(0,0,R*1.65,0,7);ctx.fill(); }
+
+  // stink lines
+  ctx.strokeStyle=vuln?"rgba(160,220,90,0.6)":"rgba(150,180,90,0.5)";ctx.lineWidth=3;
+  for(let i=-1;i<2;i++){ctx.beginPath();ctx.moveTo(i*24,-R*1.05);ctx.quadraticCurveTo(i*24+10,-R*1.32,i*24,-R*1.58);ctx.stroke();}
+
+  // stacked poop lobes
+  const baseCol = flash?"#ffffff":(vuln?"#6b7a3a":"#5b3a1e");
+  const hiCol   = vuln?"#88963f":"#6e4a28";
+  ctx.fillStyle=baseCol;
+  for(let i=0;i<4;i++){
+    const yy=-R*0.72+i*(R*0.5), rr=R*(1.06-i*0.13);
+    ctx.beginPath();ctx.ellipse(0,yy,rr,rr*0.72,0,0,7);ctx.fill();
+  }
+  if(!flash){ctx.fillStyle=hiCol;ctx.beginPath();ctx.ellipse(-R*0.35,-R*0.5,R*0.32,R*0.22,0,0,7);ctx.fill();}
+
+  // face
+  const eyeY=-R*0.2, pdx=-R*0.06;
+  ctx.fillStyle="#fff";
+  ctx.beginPath();ctx.arc(-R*0.32,eyeY,R*0.2,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.02,eyeY,R*0.2,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";
+  ctx.beginPath();ctx.arc(-R*0.32+pdx,eyeY,R*0.1,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.02+pdx,eyeY,R*0.1,0,7);ctx.fill();
+  if(!vuln){ // angry brows + gritted snarl
+    ctx.strokeStyle="#2a1810";ctx.lineWidth=5;ctx.lineCap="round";
+    ctx.beginPath();ctx.moveTo(-R*0.56,eyeY-R*0.3);ctx.lineTo(-R*0.14,eyeY-R*0.12);ctx.stroke();
+    ctx.beginPath();ctx.moveTo( R*0.26,eyeY-R*0.3);ctx.lineTo(-R*0.14,eyeY-R*0.12);ctx.stroke();
+    ctx.strokeStyle="#2a1206";ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(-R*0.5,R*0.2);ctx.quadraticCurveTo(-R*0.14,R*0.02,R*0.2,R*0.22);ctx.stroke();
+    ctx.fillStyle="#fff";
+    for(let i=0;i<4;i++){const tx=-R*0.42+i*R*0.2;ctx.fillRect(tx,R*0.12,R*0.08,R*0.1);}
+  } else { // dizzy sweat + pained "o" mouth
+    ctx.fillStyle="#2a1206";
+    ctx.beginPath();ctx.ellipse(-R*0.14,R*0.14,R*0.16,R*0.2,0,0,7);ctx.fill();
+    ctx.fillStyle="rgba(180,230,255,0.85)";
+    ctx.beginPath();ctx.ellipse(R*0.28,-R*0.34,4,7,0,0,7);ctx.fill();
+  }
+
+  // glowing corn weak spot (only while stunned) — ram it!
+  if (vuln){
+    const wx=b.wsX-b.x, wy=b.wsY-b.y, pulse=1+Math.sin(b.bob*8)*0.16;
+    ctx.save();ctx.translate(wx,wy);ctx.scale(pulse,pulse);
+    ctx.fillStyle="rgba(255,211,78,0.35)";ctx.beginPath();ctx.arc(0,0,34,0,7);ctx.fill();
+    ctx.fillStyle="#ffd34e";ctx.strokeStyle="#caa12f";ctx.lineWidth=2;
+    ctx.beginPath();ctx.ellipse(0,0,17,23,0,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,0.7)";ctx.beginPath();ctx.ellipse(-5,-7,5,9,0,0,7);ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawPower(x,y,r,kind){
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="rgba(255,255,255,0.12)";ctx.beginPath();ctx.arc(0,0,r*1.5,0,7);ctx.fill();
+  if (kind==="antacid"){
+    ctx.fillStyle="#eef3ff";ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.strokeStyle="#9fb0d0";ctx.lineWidth=2;ctx.stroke();
+    ctx.strokeStyle="#7a8db0";ctx.beginPath();ctx.moveTo(-7,0);ctx.lineTo(7,0);ctx.moveTo(0,-7);ctx.lineTo(0,7);ctx.stroke();
+  } else if (kind==="soap"){
+    const g=ctx.createRadialGradient(-5,-5,2,0,0,r);
+    g.addColorStop(0,"rgba(255,255,255,0.9)");g.addColorStop(0.6,"rgba(180,230,255,0.5)");g.addColorStop(1,"rgba(120,200,255,0.2)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.8)";ctx.beginPath();ctx.arc(-5,-5,3,0,7);ctx.fill();
+  } else if (kind==="sauce"){
+    ctx.fillStyle="#d23a2a";ctx.fillRect(-7,-r,14,r*2);
+    ctx.fillStyle="#fff";ctx.font="bold 12px monospace";ctx.textAlign="center";ctx.fillText("🌶",0,5);
+  }
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const p=player;
+  ctx.save();
+  ctx.translate(p.x,p.y);
+  ctx.rotate(p.tilt*0.5);
+  const blink = p.iframe>0 && Math.floor(runTime*20)%2===0;
+  if (blink) ctx.globalAlpha=0.4;
+
+  // soap bubble shield
+  if (p.bubble>0){
+    const bg=ctx.createRadialGradient(-6,-6,4,0,0,30);
+    bg.addColorStop(0,"rgba(255,255,255,0.35)");bg.addColorStop(0.7,"rgba(180,230,255,0.18)");bg.addColorStop(1,"rgba(120,200,255,0.05)");
+    ctx.fillStyle=bg;ctx.beginPath();ctx.arc(0,0,30,0,7);ctx.fill();
+    ctx.strokeStyle="rgba(200,240,255,0.5)";ctx.lineWidth=2;ctx.stroke();
+  }
+  if (p.boost>0){
+    ctx.fillStyle="rgba(255,120,40,0.5)";
+    for(let i=1;i<=3;i++){ctx.beginPath();ctx.ellipse(-18-i*8,0,6,4,0,0,7);ctx.fill();}
+  }
+
+  const wig = Math.sin(p.wig)*4;
+  // tail
+  ctx.fillStyle="#e8772a";
+  ctx.beginPath();ctx.moveTo(-14,0);
+  ctx.lineTo(-30,-10+wig);ctx.lineTo(-26,0);ctx.lineTo(-30,10+wig);ctx.closePath();ctx.fill();
+  // body
+  const bg=ctx.createLinearGradient(0,-14,0,14);
+  bg.addColorStop(0,"#ffb347");bg.addColorStop(1,"#f3852a");
+  ctx.fillStyle=bg;
+  ctx.beginPath();ctx.ellipse(0,0,16,12,0,0,7);ctx.fill();
+  // top fin
+  ctx.fillStyle="#f3852a";
+  ctx.beginPath();ctx.moveTo(-2,-11);ctx.quadraticCurveTo(2,-20+wig*0.5,10,-9);ctx.closePath();ctx.fill();
+  // belly shimmer
+  ctx.fillStyle="rgba(255,240,200,0.5)";
+  ctx.beginPath();ctx.ellipse(2,4,9,5,0,0,7);ctx.fill();
+  // side fin
+  ctx.fillStyle="#e8772a";
+  ctx.beginPath();ctx.moveTo(2,4);ctx.quadraticCurveTo(-2,12+wig*0.4,8,10);ctx.closePath();ctx.fill();
+  // eye
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(8,-3,4.5,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";ctx.beginPath();ctx.arc(9.5,-3,2.3,0,7);ctx.fill();
+  // mouth (open if thrusting)
+  ctx.strokeStyle="#b4561c";ctx.lineWidth=2;
+  ctx.beginPath();
+  if (thrust){ctx.arc(15,2,2.6,0,7);} else {ctx.moveTo(13,3);ctx.lineTo(17,3);}
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawParticles(){
+  for (const p of parts){
+    const a = clamp(p.life/p.max,0,1);
+    if (p.color==="bubble"){
+      ctx.strokeStyle=`rgba(200,235,255,${a*0.5})`;ctx.lineWidth=1.5;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,7);ctx.stroke();
+      ctx.fillStyle=`rgba(255,255,255,${a*0.3})`;
+      ctx.beginPath();ctx.arc(p.x-p.r*0.3,p.y-p.r*0.3,p.r*0.3,0,7);ctx.fill();
+    } else {
+      ctx.fillStyle=p.color.replace(')',`,${a})`).replace('rgb','rgba').replace('#',''); // fallback
+      ctx.fillStyle = hexA(p.color,a);
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r*a,0,7);ctx.fill();
+    }
+  }
+}
+
+function drawHUD(z){
+  // health bar
+  const bw=220, bh=16, bx=16, by=16;
+  ctx.fillStyle="rgba(0,0,0,0.45)";ctx.fillRect(bx-3,by-3,bw+6,bh+6);
+  const hpRatio = player.hp/player.maxhp;
+  const col = hpRatio>0.5?"#7cd34a":hpRatio>0.25?"#ffd34e":"#ff5151";
+  ctx.fillStyle="#1a241b";ctx.fillRect(bx,by,bw,bh);
+  ctx.fillStyle=col;ctx.fillRect(bx,by,bw*hpRatio,bh);
+  ctx.fillStyle="#dfeede";ctx.font="bold 11px monospace";ctx.textAlign="left";
+  ctx.fillText("HEALTH",bx+4,by+12);
+
+  // boss health bar (centered, while THE CLOGFATHER lives)
+  if (bossActive && boss){
+    const cbw=360, cbh=15, cbx=(W-cbw)/2, cby=30;
+    ctx.fillStyle="rgba(0,0,0,0.5)";ctx.fillRect(cbx-3,cby-3,cbw+6,cbh+6);
+    ctx.fillStyle="#2a1418";ctx.fillRect(cbx,cby,cbw,cbh);
+    const r=clamp(boss.hp/boss.maxhp,0,1);
+    ctx.fillStyle="#9a6a34";ctx.fillRect(cbx,cby,cbw*r,cbh);
+    ctx.strokeStyle="rgba(255,220,150,0.4)";ctx.lineWidth=1;ctx.strokeRect(cbx,cby,cbw,cbh);
+    ctx.fillStyle="#ffe0a8";ctx.font="bold 11px monospace";ctx.textAlign="center";
+    ctx.fillText("THE CLOGFATHER",W/2,cby+11);
+    if (boss.phase==="vulnerable"){
+      ctx.fillStyle="#ffd34e";ctx.font="bold 15px monospace";
+      ctx.fillText("▶ SWIM INTO THE GLOWING CORN! ◀",W/2,cby+42);
+    } else if (boss.phase==="attack"||boss.phase==="intro"){
+      ctx.fillStyle="#ff9a6a";ctx.font="bold 13px monospace";
+      ctx.fillText("DODGE!",W/2,cby+42);
+    }
+  }
+
+  // distance / progress
+  ctx.textAlign="right";
+  ctx.font="bold 18px monospace";ctx.fillStyle="#fff";
+  ctx.fillText(Math.floor(distance)+" m",W-16,30);
+  ctx.font="12px monospace";ctx.fillStyle="#bcd3c0";
+  ctx.fillText("🌽 "+cornEaten,W-16,48);
+  ctx.fillStyle="#9fb7a3";ctx.fillText("Lv "+difficulty,W-16,66);
+  ctx.fillStyle=curLevel===2?"#7fd6f0":"#c9a06a";
+  ctx.fillText(curLevel===2?"② THE RIVER":"① THE SEWER",W-16,84);
+
+  // progress bar to ocean (boss gate marked at the sewer/river seam)
+  const pw=W-32, pbY=H-14;
+  ctx.fillStyle="rgba(0,0,0,0.4)";ctx.fillRect(16,pbY-3,pw,6);
+  ctx.fillStyle="#2bb3e0";ctx.fillRect(16,pbY-3,pw*clamp(distance/WIN_DISTANCE,0,1),6);
+  const bmx = 16+pw*(BOSS_DISTANCE/WIN_DISTANCE);
+  ctx.fillStyle=bossDefeated?"#6a8f4a":"#d8b24a";ctx.fillRect(bmx-1,pbY-6,2,12);
+  ctx.font="11px monospace";ctx.textAlign="center";
+  ctx.fillText(bossDefeated?"✓":"💩",bmx,pbY-8);
+  ctx.fillStyle="#fff";ctx.font="14px monospace";ctx.textAlign="right";
+  ctx.fillText("🌊",16+pw,pbY+1);
+
+  // active power indicators
+  let ix=16, iy=42;
+  ctx.font="11px monospace";ctx.textAlign="left";
+  if (player.shield>0){ctx.fillStyle="#bfe9ff";ctx.fillText("⊕ ANTACID SHIELD",ix,iy);iy+=14;}
+  if (player.bubble>0){ctx.fillStyle="#cdeaff";ctx.fillText("○ BUBBLE "+player.bubble.toFixed(1),ix,iy);iy+=14;}
+  if (player.boost>0){ctx.fillStyle="#ff8a4d";ctx.fillText("» HOT SAUCE "+player.boost.toFixed(1),ix,iy);iy+=14;}
+
+  // zone banner
+  if (zoneName && zoneName.t>0){
+    const a=clamp(zoneName.t>2.2?(2.6-zoneName.t)/0.4:zoneName.t/1.0,0,1);
+    ctx.globalAlpha=a;
+    ctx.textAlign="center";ctx.font="bold 30px monospace";
+    ctx.fillStyle="rgba(0,0,0,0.5)";ctx.fillText(zoneName.txt,W/2+2,H*0.32+2);
+    ctx.fillStyle="#ffd34e";ctx.fillText(zoneName.txt,W/2,H*0.32);
+    ctx.globalAlpha=1;
+  }
+
+  // now-playing readout
+  if (nowPlaying && nowPlaying.t > 0){
+    const a = clamp(nowPlaying.t > 3.4 ? (4.0-nowPlaying.t)/0.6 : nowPlaying.t/1.0, 0, 1);
+    ctx.globalAlpha = a*0.85;
+    ctx.textAlign="left";ctx.font="12px monospace";ctx.fillStyle="#bfe9c0";
+    ctx.fillText("♪ "+nowPlaying.name, 16, H-26);
+    ctx.globalAlpha=1;
+  }
+}
+
+// color utils
+function shade(hex,f){
+  const c=hex.replace('#','');
+  let r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
+  r=Math.round(r*f);g=Math.round(g*f);b=Math.round(b*f);
+  return `rgb(${r},${g},${b})`;
+}
+function hexA(hex,a){
+  if(hex[0]!=='#') return hex;
+  const c=hex.replace('#','');
+  const r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ---------- loop ----------
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000; last=now;
+  dt=Math.min(dt,0.05);
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- screens / input ----------
+function show(el){
+  [elTitle,elDead,elWin,elEnd].forEach(s=>s.classList.add('hidden'));
+  if (el) el.classList.remove('hidden');
+}
+let lastStart = 0;
+function startGame(){
+  const t = Date.now();
+  if (t - lastStart < 350) return;     // debounce touch + synthetic click
+  lastStart = t;
+  DIFF = buildDiff(difficulty);
+  reset();
+  state=STATE.PLAY;
+  show(null);
+  try { Music.playRandom(); } catch(e){}
+}
+
+// Robust tap: fire on BOTH touchend and click, de-duped — works on phones
+// whose browsers don't reliably deliver synthetic click events to buttons.
+function bindTap(el, fn){
+  if (!el) return;
+  let lock = 0;
+  function go(e){
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+    const t = Date.now();
+    if (t - lock < 500) return;
+    lock = t;
+    fn(e);
+  }
+  el.addEventListener('touchend', go, {passive:false});
+  el.addEventListener('click', go);
+}
+bindTap(document.getElementById('btn-start'), startGame);
+bindTap(document.getElementById('btn-retry'), startGame);
+bindTap(document.getElementById('btn-end-again'), startGame);
+bindTap(document.getElementById('btn-shell'), () => chooseEnding('shell'));
+bindTap(document.getElementById('btn-cave'),  () => chooseEnding('cave'));
+bindTap(document.getElementById('btn-swim'),  () => chooseEnding('shark'));
+
+// difficulty selector
+function diffLabel(n){
+  if (n <= 1) return "Barely trying — a lazy float 🐠";
+  if (n <= 2) return "Very easy";
+  if (n <= 4) return "Easy";
+  if (n <= 6) return "Balanced";
+  if (n <= 8) return "Tough";
+  if (n <= 9) return "Hard";
+  return "Hardest — but still fair";
+}
+function setDiff(v){
+  difficulty = clamp(Math.round(v), 1, 10);
+  document.querySelectorAll('.diff-val').forEach(e => e.textContent = difficulty);
+  document.querySelectorAll('.diff-desc').forEach(e => e.textContent = diffLabel(difficulty));
+}
+document.querySelectorAll('.diff-down').forEach(b => bindTap(b, () => setDiff(difficulty - 1)));
+document.querySelectorAll('.diff-up').forEach(b => bindTap(b, () => setDiff(difficulty + 1)));
+setDiff(difficulty);
+
+function press(){
+  if (state===STATE.PLAY) thrust = true;
+  else if (state===STATE.DEAD || state===STATE.WIN) startGame();
+}
+function release(){ thrust = false; }
+
+// pointer events (mouse, stylus, most touch)
+canvas.addEventListener('pointerdown', e=>{ if(e.cancelable)e.preventDefault(); press(); }, {passive:false});
+window.addEventListener('pointerup', release);
+window.addEventListener('pointercancel', release);
+// explicit touch fallback for browsers where pointer events misbehave
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); press(); }, {passive:false});
+canvas.addEventListener('touchend',   e=>{ e.preventDefault(); release(); }, {passive:false});
+canvas.addEventListener('touchcancel', release);
+// mouse fallback (older browsers)
+canvas.addEventListener('mousedown', press);
+window.addEventListener('mouseup', release);
+
+// keyboard
+window.addEventListener('keydown',e=>{
+  if (e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW'){
+    e.preventDefault();
+    if (state===STATE.TITLE || state===STATE.DEAD) startGame();
+    else thrust=true;
+  }
+});
+window.addEventListener('keyup',e=>{
+  if (e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW') thrust=false;
+});
+
+// mute toggle
+const muteBtn = document.getElementById('mute');
+function syncMute(m){ muteBtn.classList.toggle('off', m); muteBtn.title = (m?'Unmute':'Mute')+' music (M)'; }
+bindTap(muteBtn, ()=> syncMute(Music.toggleMute()));
+window.addEventListener('keydown', e=>{ if(e.code==='KeyM'){ syncMute(Music.toggleMute()); } });
+
+reset();
+})();
+</script>
+</body>
+</html>
