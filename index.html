@@ -255,6 +255,16 @@ let thrust = false;
 let distance, scroll, cornEaten, runTime, shake, flash, bgFlow, zoneName;
 let player, ents, parts, spawnTimer, powerTimer, ratTimer, lastZone;
 let boss = null, bossActive = false, bossesDone = {}, curLevel = 1;
+let sublim = null, sublimTimer = 0;   // barely-there "subliminal" flashes
+
+// ...totally normal messages the sewer definitely is NOT whispering to you...
+const SUBLIMINAL = [
+  "EAT THE CORN","OBEY SIR REGINALD","CORN IS HEALTH","THE OCEAN IS REAL",
+  "TRUST THE CURRENT","STAY FLUSHED","MORE CORN","YOU ARE A FISH",
+  "GLUB GLUB","DODGE THE BROWN","BEWARE THE BEAVER","JUST ONE MORE RUN",
+  "RATE 5 STARS","TELL YOUR FRIENDS","FEED THE FISH","EMBRACE THE SEWER",
+  "CORN CORN CORN","DON'T GET CLOGGED","SWIM DEEPER","REGINALD SEES YOU"
+];
 
 // ---------- helpers ----------
 const rand = (a,b)=> a + Math.random()*(b-a);
@@ -361,6 +371,7 @@ function reset(){
   powerTimer = rand(6,9);
   ratTimer = 999;
   boss = null; bossActive = false; bossesDone = {}; curLevel = 1;
+  sublim = null; sublimTimer = rand(4, 8);
 }
 
 // ---------- zones ----------
@@ -947,6 +958,14 @@ function update(dt){
   if (zoneName) zoneName.t -= dt;
   if (nowPlaying) nowPlaying.t -= dt;
 
+  // ---- subliminal flashes (definitely nothing to worry about) ----
+  sublimTimer -= dt;
+  if (sublimTimer <= 0){
+    sublim = { txt: SUBLIMINAL[(Math.random()*SUBLIMINAL.length)|0], t: 0.14, dur: 0.14 };
+    sublimTimer = rand(4.5, 9.0);
+  }
+  if (sublim){ sublim.t -= dt; if (sublim.t <= 0) sublim = null; }
+
   // ---- player physics ----
   const GRAV = 900, THR = -1500, MAXV = 520;
   player.vy += (thrust ? THR : GRAV) * dt;
@@ -1160,6 +1179,19 @@ function draw(){
 
   // HUD
   if (state===STATE.PLAY || state===STATE.DEAD) drawHUD(z);
+
+  // subliminal flash — a blink of text, gone before you're sure you saw it
+  if (sublim && state===STATE.PLAY){
+    const a = clamp(sublim.t/sublim.dur, 0, 1) * 0.6;   // gentle, never a hard strobe
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "bold 46px monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(sublim.txt, W/2, H*0.46);
+    ctx.restore();
+    ctx.textBaseline = "alphabetic";
+  }
 }
 
 function drawBackground(z){
