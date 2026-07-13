@@ -1173,10 +1173,11 @@ function draw(){
   // HUD
   if (state===STATE.PLAY || state===STATE.DEAD) drawHUD(z);
 
-  // subliminal flash — drawn for exactly ONE frame (~16ms), too brief to read
+  // subliminal flash — ONE frame (~16ms) AND near-threshold opacity, so it
+  // registers below conscious perception rather than reading as a bright flash
   if (sublim && sublim.frames>0 && state===STATE.PLAY){
     ctx.save();
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.08;                     // faint ghost, not a flash
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = "bold 46px monospace";
     ctx.fillStyle = "#ffffff";
