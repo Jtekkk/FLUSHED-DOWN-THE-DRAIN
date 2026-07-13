@@ -124,11 +124,11 @@
     <!-- TITLE -->
     <div class="screen" id="screen-title">
       <h1>FLUSHED<small>DOWN THE DRAIN</small></h1>
-      <p class="tag">You are <b>Sir Reginald Bubbles III</b>, a beloved family goldfish — just <i>unceremoniously flushed</i>. Survive the sewer, best the <b>CLOGFATHER</b> at its end, then ride the <b>RIVER</b> out to the open <b>OCEAN</b>.</p>
+      <p class="tag">You are <b>Sir Reginald Bubbles III</b>, a beloved family goldfish — just <i>unceremoniously flushed</i>. Fight through <b>3 levels</b> — the <b>SEWER</b>, the <b>TREATMENT PLANT</b>, and the <b>RIVER</b> — beating the boss at the end of each to reach the open <b>OCEAN</b>.</p>
       <div class="controls">
         <span class="key">CLICK</span> / <span class="key">TAP</span> / <span class="key">SPACE</span> &nbsp;hold to swim up · release to sink<br>
-        🌽 corn = health &nbsp;·&nbsp; 💩 poop &amp; 🧻 clogs = ouch &nbsp;·&nbsp; 🪨 rocks &amp; 🪝 hooks lurk in the river<br>
-        BOSS: dodge its filth, then <b>ram the glowing 🌽</b> to clog it up
+        🌽 corn = health &nbsp;·&nbsp; dodge 💩 filth, ❖ chemical flakes, ⚙ mixer arms, 🪨 rocks &amp; 🪝 hooks<br>
+        BOSSES 💩🍑🦫 : dodge their attacks, then <b>ram the glowing 🌽</b> weak spot
       </div>
       <div class="diffwrap">
         <div class="difftitle">DIFFICULTY 1–10</div>
@@ -229,13 +229,24 @@ const elEnd   = document.getElementById('screen-ending');
 const STATE = { TITLE:0, PLAY:1, DEAD:2, WIN:3, ENDING:4 };
 let state = STATE.TITLE;
 
-const BOSS_DISTANCE = 1100;       // end of the sewer — THE CLOGFATHER boss gate
-const WIN_DISTANCE = 2100;        // meters to the open ocean (out through the river)
+const WIN_DISTANCE = 2400;        // meters to the open ocean (through 3 levels)
 let best = 0;
 
-// The current freezes here while the turd boss holds the pipe. Its own arena zone.
-const BOSS_ZONE = {level:1, name:"SEWER'S END", tint:"#2a1016", flow:"#3a1420",
-                   rats:false, intensity:0.25, types:[]};
+// Three levels, each capped by a boss that freezes the current until beaten.
+//   gate = distance the boss blocks; arena = the backdrop while you fight it.
+const BOSSES = {
+  clog:   { name:"THE CLOGFATHER", gate:700,  hp:100, level:1, bodyR:70,
+            arena:{level:1, name:"SEWER'S END",     tint:"#2a1016", flow:"#3a1420", intensity:0.25} },
+  sludge: { name:"THE BUTT SLUDGE", gate:1400, hp:120, level:2, bodyR:76,
+            arena:{level:2, name:"THE DIGESTER",     tint:"#25301a", flow:"#3d4a20", intensity:0.3} },
+  beaver: { name:"THE DAM BEAVER",  gate:2200, hp:130, level:3, bodyR:66,
+            arena:{level:3, name:"THE BEAVER DAM",   tint:"#123a30", flow:"#1f6a54", intensity:0.2} },
+};
+const BOSS_GATES = [
+  { at: BOSSES.clog.gate,   id:"clog" },
+  { at: BOSSES.sludge.gate, id:"sludge" },
+  { at: BOSSES.beaver.gate, id:"beaver" },
+];
 
 // input
 let thrust = false;
@@ -243,7 +254,7 @@ let thrust = false;
 // world
 let distance, scroll, cornEaten, runTime, shake, flash, bgFlow, zoneName;
 let player, ents, parts, spawnTimer, powerTimer, ratTimer, lastZone;
-let boss = null, bossActive = false, bossDefeated = false, curLevel = 1;
+let boss = null, bossActive = false, bossesDone = {}, curLevel = 1;
 
 // ---------- helpers ----------
 const rand = (a,b)=> a + Math.random()*(b-a);
@@ -349,27 +360,28 @@ function reset(){
   spawnTimer = 1.4;       // grace before first obstacle
   powerTimer = rand(6,9);
   ratTimer = 999;
-  boss = null; bossActive = false; bossDefeated = false; curLevel = 1;
+  boss = null; bossActive = false; bossesDone = {}; curLevel = 1;
 }
 
 // ---------- zones ----------
-// LEVEL 1 = THE SEWER (0 → boss).  LEVEL 2 = THE RIVER (boss → OCEAN).
+// L1 THE SEWER (0–700) · L2 THE TREATMENT PLANT (700–1400) · L3 THE RIVER (1400–2400).
 function zoneFor(d){
   // ---- LEVEL 1 · THE SEWER ----
   if (d < 150)  return {level:1, name:"THE BOWL DROP",     tint:"#163b2b", flow:"#1f5740", rats:false, intensity:0.0,  types:["floater"]};
-  if (d < 380)  return {level:1, name:"RESIDENTIAL PIPES", tint:"#173026", flow:"#234f3a", rats:false, intensity:0.35, types:["floater","floater","tp"]};
-  if (d < 620)  return {level:1, name:"THE MAIN LINE",     tint:"#241f17", flow:"#3a3020", rats:true,  intensity:0.6,  types:["floater","tp","grate","floater"]};
-  if (d < 880)  return {level:1, name:"TREATMENT PLANT",   tint:"#2a1414", flow:"#43201f", rats:true,  intensity:0.9,  types:["hair","grate","plunger","tp","floater"]};
-  if (d < BOSS_DISTANCE)
-                return {level:1, name:"THE OUTFLOW",       tint:"#241016", flow:"#3a1420", rats:false, intensity:0.6, sprint:true, types:["floater","grate","plunger"]};
-  // ---- LEVEL 2 · THE RIVER ----
-  if (d < 1360) return {level:2, name:"THE RIVER MOUTH",   tint:"#123b3c", flow:"#1f6f70", rats:false, intensity:0.3,  clean:true, types:["rock","log","rock"]};
-  if (d < 1640) return {level:2, name:"DOWN THE RIVER",    tint:"#134a44", flow:"#26887a", rats:false, intensity:0.55, clean:true, sprint:true, types:["rock","log","hook","grate"]};
-  if (d < 1900) return {level:2, name:"THE ESTUARY",       tint:"#124a57", flow:"#1f88a0", rats:false, intensity:0.4,  clean:true, types:["log","hook","rock"]};
-  return          {level:2, name:"OCEAN AHEAD",     tint:"#0e5a78", flow:"#1f8fc0", rats:false, intensity:0.15, clean:true, types:["log"]};
+  if (d < 340)  return {level:1, name:"RESIDENTIAL PIPES", tint:"#173026", flow:"#234f3a", rats:false, intensity:0.35, types:["floater","floater","tp"]};
+  if (d < 700)  return {level:1, name:"THE MAIN LINE",     tint:"#241f17", flow:"#3a3020", rats:true,  intensity:0.6,  types:["floater","tp","grate","floater"]};
+  // ---- LEVEL 2 · THE TREATMENT PLANT (chemical flakes + mixer arms) ----
+  if (d < 950)  return {level:2, name:"THE SETTLING TANKS", tint:"#2a2612", flow:"#454018", rats:false, intensity:0.4,  types:["flake","tp","flake","grate"]};
+  if (d < 1200) return {level:2, name:"THE AERATION BASIN", tint:"#262e14", flow:"#3f4a1c", rats:false, intensity:0.7,  types:["mixer","flake","mixer","grate"]};
+  if (d < 1400) return {level:2, name:"THE CLARIFIER",      tint:"#242a16", flow:"#3a461e", rats:false, intensity:0.85, types:["mixer","flake","mixer","flake"]};
+  // ---- LEVEL 3 · THE RIVER ----
+  if (d < 1680) return {level:3, name:"THE RIVER MOUTH",   tint:"#123b3c", flow:"#1f6f70", rats:false, intensity:0.3,  clean:true, types:["rock","log","rock"]};
+  if (d < 1940) return {level:3, name:"DOWN THE RIVER",    tint:"#134a44", flow:"#26887a", rats:false, intensity:0.55, clean:true, sprint:true, types:["rock","log","hook","grate"]};
+  if (d < 2200) return {level:3, name:"THE ESTUARY",       tint:"#124a57", flow:"#1f88a0", rats:false, intensity:0.4,  clean:true, types:["log","hook","rock"]};
+  return          {level:3, name:"OCEAN AHEAD",     tint:"#0e5a78", flow:"#1f8fc0", rats:false, intensity:0.15, clean:true, types:["log"]};
 }
-// Zone in effect right now (the boss freezes the world in its own arena).
-function currentZone(){ return bossActive ? BOSS_ZONE : zoneFor(distance); }
+// Zone in effect right now (a boss freezes the world in its own arena).
+function currentZone(){ return (bossActive && boss) ? boss.zone : zoneFor(distance); }
 
 // ---------- spawning ----------
 function spawn(z){
@@ -398,6 +410,18 @@ function spawn(z){
   } else if (t === "hook"){
     const baseY = rand(58, H*0.5);
     ents.push({k:"hook", x:W+40, baseY, y:baseY, ph:rand(0,7), amp:rand(28,70), r:12});
+  } else if (t === "flake"){
+    // a little curtain of chemical flakes raining down from the top
+    const n = 2 + (chance(0.5)?1:0);
+    const baseX = W+30;
+    for (let i=0;i<n;i++)
+      ents.push({k:"flake", x:baseX+rand(0,46), y:rand(-50,30), r:rand(7,11),
+        vy:rand(80,160), sway:rand(0,7), hue: chance(0.5)?"#a6e0c0":"#cfe6a0"});
+  } else if (t === "mixer"){
+    // a paddle bar spinning across the channel — pass it when it lies flat
+    const len = rand(130,168) + DIFF.gapBonus*0.4;
+    ents.push({k:"mixer", x:W+50, pivotY:H*0.5+rand(-40,40), len,
+      ang:rand(0,7), spd:(chance(0.5)?1:-1)*rand(1.2,2.1)});
   }
   // corn sprinkled with most spawns
   if (chance(DIFF.cornFreq)){
@@ -424,41 +448,50 @@ function spawnPower(){
   ents.push({k:"power", kind, x:W+40, y:rand(90,H-90), r:18, bob:rand(0,6)});
 }
 
-// ---------- THE CLOGFATHER (turd boss) ----------
-// Guards the seam between the sewer and the river. Two phases on a loop:
-//   ATTACK      — looms on the right (out of reach), lobs turd-shots you dodge.
+// ---------- BOSSES ----------
+// One phase machine drives all three. Two phases on a loop:
+//   ATTACK      — looms on the right (out of reach), lobs shots you dodge.
 //   VULNERABLE  — clogs up, drifts into reach, exposes a glowing corn weak spot.
 //                 Ram the corn to hurt it. Body can't hurt you while it's stunned.
+// Only the artwork (drawBoss*) and the projectile flavour (bossShoot) differ.
 const BOSS_ATTACK_X = W*0.75;
 const BOSS_VULN_X   = W*0.40;
-function startBoss(){
+const BOSS_SPLAT = { clog:"#7a4a22", sludge:"#6b8f3a", beaver:"#8a5a30" };
+const BOSS_SHOT = {
+  clog:   {style:"turd",   cause:"boss",   n:3, spd:[205,255], big:0.22, spread:0.62, size:13, sizeBig:20},
+  sludge: {style:"sludge", cause:"sludge", n:4, spd:[178,222], big:0.30, spread:0.80, size:15, sizeBig:23},
+  beaver: {style:"log",    cause:"beaver", n:3, spd:[240,300], big:0.35, spread:0.42, size:15, sizeBig:22},
+};
+function startBoss(id, at){
+  const def = BOSSES[id];
   bossActive = true;
-  distance = BOSS_DISTANCE;                       // freeze the run at the gate
+  distance = at;                                  // freeze the run at the gate
   ents = ents.filter(e => e.k === "corn" && !e.fired);
-  boss = { hp:100, maxhp:100, x:W+200, y:H*0.5, phase:"intro", timer:2.4,
-           bob:0, iframe:0, hitFlash:0, shootT:0, wsX:0, wsY:0, bodyR:70 };
-  zoneName = {txt:"⚠ THE CLOGFATHER ⚠", t:3.2};
+  boss = { id, name:def.name, gateAt:at, zone:def.arena,
+           hp:def.hp, maxhp:def.hp, x:W+200, y:H*0.5, phase:"intro", timer:2.4,
+           bob:0, iframe:0, hitFlash:0, shootT:0, wsX:0, wsY:0, bodyR:def.bodyR };
+  zoneName = {txt:"⚠ "+def.name+" ⚠", t:3.2};
   shake = 12;
   try { Music.playRandom(); } catch(e){}
 }
 function bossShoot(){
-  const b = boss;
-  const n = 3 + Math.min(3, Math.floor(DIFF.level/3));   // 3..6 pellets
-  const spread = 0.62;
+  const b = boss, cfg = BOSS_SHOT[b.id];
+  const n = cfg.n + Math.min(3, Math.floor(DIFF.level/3));
   for (let i=0;i<n;i++){
     const frac = n>1 ? i/(n-1) : 0.5;
-    const ang  = Math.PI - spread/2 + frac*spread + rand(-0.05,0.05);
-    const spd  = rand(205,255) + DIFF.level*8;
-    const big  = chance(0.22);
-    ents.push({k:"turdshot", fired:true, x:b.x-46, y:b.y+rand(-28,28),
+    const ang  = Math.PI - cfg.spread/2 + frac*cfg.spread + rand(-0.05,0.05);
+    const spd  = rand(cfg.spd[0], cfg.spd[1]) + DIFF.level*8;
+    const big  = chance(cfg.big);
+    ents.push({k:"bshot", style:cfg.style, cause:cfg.cause, fired:true,
+      x:b.x-46, y:b.y+rand(-28,28),
       vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*1.15,
-      r: big?20:13, big, spin:rand(0,7)});
+      r: big?cfg.sizeBig:cfg.size, big, spin:rand(0,7)});
   }
   if (chance(0.55)){   // toss a mercy kernel to eat
     ents.push({k:"corn", fired:true, x:b.x-46, y:b.y+rand(-70,70), r:9,
       vx:-rand(150,205), vy:rand(-45,45), eaten:false, born:0});
   }
-  burst(b.x-34, b.y, "#5b3a1e", 8, 130);
+  burst(b.x-34, b.y, BOSS_SPLAT[b.id], 8, 130);
 }
 function bossHit(){
   const b = boss;
@@ -468,7 +501,7 @@ function bossHit(){
   player.vy = -320;                              // knock the fish clear
   player.iframe = Math.max(player.iframe, 0.35);
   burst(b.wsX, b.wsY, "#ffd34e", 16, 240);
-  burst(b.wsX, b.wsY, "#7a4a22", 10, 180);
+  burst(b.wsX, b.wsY, BOSS_SPLAT[b.id], 10, 180);
   shake = Math.max(shake, 9);
   if (b.hp <= 0){ b.hp = 0; bossDie(); }
 }
@@ -476,14 +509,16 @@ function bossDie(){
   boss.phase = "dying"; boss.timer = 2.0;
   shake = 22; flash = Math.min(1, flash + 0.5);
   burst(boss.x, boss.y, "#ffd34e", 30, 330);
-  burst(boss.x, boss.y, "#7a4a22", 26, 280);
-  ents = ents.filter(e => e.k !== "turdshot");
-  zoneName = {txt:"THE CLOGFATHER IS DOWN!", t:3.0};
+  burst(boss.x, boss.y, BOSS_SPLAT[boss.id], 26, 280);
+  ents = ents.filter(e => e.k !== "bshot");
+  zoneName = {txt:boss.name+" IS DOWN!", t:3.0};
 }
 function finishBoss(){
-  bossActive = false; bossDefeated = true; boss = null;
-  distance = BOSS_DISTANCE + 2;                  // nudge into the river
-  scroll = 200; lastZone = "";                   // let the river zone announce itself
+  bossesDone[boss.id] = true;
+  const at = boss.gateAt;
+  bossActive = false; boss = null;
+  distance = at + 2;                             // nudge past the gate into the next level
+  scroll = 200; lastZone = "";                   // let the next zone announce itself
   player.hp = clamp(player.hp + 30, 0, player.maxhp);
   try { Music.playRandom(); } catch(e){}
 }
@@ -508,13 +543,13 @@ function updateBoss(dt){
     b.x += (BOSS_VULN_X - b.x) * Math.min(1, dt*2.4);
     b.y += (H*0.5      - b.y) * Math.min(1, dt*2);
     b.timer -= dt;
-    b.wsX = b.x - 96;
+    b.wsX = b.x - (b.bodyR + 28);
     b.wsY = b.y + Math.sin(b.bob*2.2)*42;
     if (b.iframe<=0 && dist2(player.x,player.y,b.wsX,b.wsY) < (player.r*0.82+30)**2) bossHit();
     if (b.timer <= 0){ b.phase="attack"; b.timer=5.0; b.shootT=0.5; }
   } else if (b.phase === "dying"){
     b.timer -= dt;
-    if (chance(0.6)) burst(b.x+rand(-60,60), b.y+rand(-70,70), chance(0.5)?"#7a4a22":"#ffd34e", 6, 220);
+    if (chance(0.6)) burst(b.x+rand(-60,60), b.y+rand(-70,70), chance(0.5)?BOSS_SPLAT[b.id]:"#ffd34e", 6, 220);
     if (b.timer <= 0){ finishBoss(); }
   }
 }
@@ -562,8 +597,16 @@ const EPITAPHS = {
            "Reginald entered the TP cloud and did not exit.\nA soft, papery doom."],
   grate:  ["Reginald met the drain grate face-first.\nThe grate won.",
            "Filtered out by the treatment plant.\nWorking as intended, sadly."],
-  boss:   ["THE CLOGFATHER made Reginald an offer he couldn't survive.\nSo close to the river, too.",
+  boss:   ["THE CLOGFATHER made Reginald an offer he couldn't survive.\nSo close to the treatment plant, too.",
            "Reginald challenged the porcelain throne's champion — and lost.\nThe sewer keeps its king."],
+  sludge: ["THE BUTT SLUDGE swallowed Reginald whole.\nA truly bottomless end.",
+           "Reginald was digested by the digester.\nThe plant does its job, even now."],
+  chem:   ["A chemical flake dissolved Reginald mid-swim.\nBetter living through chemistry, they said.",
+           "Reginald took a face-full of treatment-plant flake.\nClean, at least. Dead, but clean."],
+  mixer:  ["Reginald got folded into the aeration mixer.\nWell blended. Poorly ended.",
+           "The mixer arm caught Reginald on the backswing.\nStirred, not shaken."],
+  beaver: ["THE DAM BEAVER decided Reginald was building material.\nGnawed and gone.",
+           "Reginald met the river's engineer. The dam held. Reginald did not."],
   rock:   ["Reginald met a river rock at full current.\nThe rock is doing fine, thanks for asking.",
            "Dashed upon the rocks. A very scenic way to go belly-up."],
   log:    ["Flattened by a floating log. Timber.\nReginald never saw the river for the trees.",
@@ -879,7 +922,7 @@ function update(dt){
   const z = currentZone();
   let curScroll;
   if (bossActive){
-    // THE CLOGFATHER dams the pipe — the run holds while the water churns
+    // a boss dams the channel — the run holds while the water churns
     curScroll = 70;
     bgFlow += curScroll * dt;
   } else {
@@ -893,8 +936,10 @@ function update(dt){
     bgFlow += curScroll * dt;
 
     if (distance >= WIN_DISTANCE){ win(); return; }
-    // end of the sewer → the turd boss blocks the way to the river
-    if (!bossDefeated && distance >= BOSS_DISTANCE){ startBoss(); }
+    // reaching a level's end → its boss blocks the way to the next
+    for (const g of BOSS_GATES){
+      if (!bossesDone[g.id] && distance >= g.at){ startBoss(g.id, g.at); break; }
+    }
 
     // zone / level announce
     if (z.name !== lastZone){ lastZone = z.name; zoneName = {txt:z.name, t:2.6}; curLevel = z.level; }
@@ -923,7 +968,7 @@ function update(dt){
   // passive poison drain — filthy in the sewer, gentle in the clean-ish river
   const poison = z.clean ? 0.75 : (2.0 + z.intensity*2.2);
   player.hp -= poison * DIFF.drain * dt;
-  if (player.hp <= 0){ player.hp=0; die(bossActive?"boss":"drown"); return; }
+  if (player.hp <= 0){ player.hp=0; die(bossActive && boss ? (boss.id==="clog"?"boss":boss.id) : "drown"); return; }
 
   // ---- boss loop, or normal spawns ----
   if (bossActive){
@@ -968,6 +1013,13 @@ function update(dt){
     } else if (e.k === "hook"){
       e.x -= curScroll*dt;
       e.y = e.baseY + Math.sin((runTime+e.ph)*1.6)*e.amp;
+    } else if (e.k === "mixer"){
+      e.x -= curScroll*dt;
+      e.ang += e.spd*dt;
+    } else if (e.k === "flake"){
+      e.x -= curScroll*dt;
+      e.y += e.vy*dt;
+      e.x += Math.sin((runTime+e.sway)*3)*22*dt;   // drifts as it sinks
     } else if (e.k === "hair"){
       e.x -= curScroll*dt;
     } else {
@@ -1004,14 +1056,21 @@ function update(dt){
     }
     if (e.k==="poop"){
       if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2) hurt(e.big?34:18, e.x, e.y);
-    } else if (e.k==="turdshot"){
-      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2){ e.dead=true; hurt(e.big?26:16, e.x, e.y, "boss"); }
+    } else if (e.k==="bshot"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2){ e.dead=true; hurt(e.big?26:16, e.x, e.y, e.cause); }
     } else if (e.k==="rock"){
       if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2) hurt(e.big?30:20, e.x, e.y, "rock");
     } else if (e.k==="log"){
       if (Math.abs(px-e.x) < e.w+pr && Math.abs(py-e.y) < e.h+pr) hurt(26, e.x, e.y, "log");
     } else if (e.k==="hook"){
       if (dist2(px,py,e.x,e.y) < (pr+e.r)**2) hurt(24, e.x, e.y, "hook");
+    } else if (e.k==="flake"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.82)**2) hurt(18, e.x, e.y, "chem");
+    } else if (e.k==="mixer"){
+      // spinning diameter bar: hit if close to the swept segment
+      const c=Math.cos(e.ang), s=Math.sin(e.ang);
+      const x1=e.x+c*e.len, y1=e.pivotY+s*e.len, x2=e.x-c*e.len, y2=e.pivotY-s*e.len;
+      if (distToSeg(px,py,x1,y1,x2,y2) < 11+pr) hurt(26, e.x, e.pivotY, "mixer");
     } else if (e.k==="tp"){
       const rr = e.r*(1+e.grow*0.9);
       if (dist2(px,py,e.x,e.y) < (pr+rr*0.8)**2){ if(player.iframe<=0&&player.bubble<=0){deathCheck("tp",22);} }
@@ -1029,8 +1088,10 @@ function update(dt){
     }
   }
 
-  // cull (boss shots also die once they streak off the top or bottom)
-  ents = ents.filter(e=> !e.dead && e.x > -80 && e.x < W+300 && !(e.fired && (e.y<-160||e.y>H+160)));
+  // cull (boss shots die off top/bottom; spent flakes die below the floor)
+  ents = ents.filter(e=> !e.dead && e.x > -80 && e.x < W+300
+    && !(e.fired && (e.y<-160||e.y>H+160))
+    && !(e.k==="flake" && e.y>H+50));
 
   // particles
   for (const p of parts){
@@ -1045,6 +1106,13 @@ function update(dt){
 }
 
 function dist2(ax,ay,bx,by){ const dx=ax-bx,dy=ay-by; return dx*dx+dy*dy; }
+function distToSeg(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1, l2=dx*dx+dy*dy;
+  let t = l2 ? ((px-x1)*dx+(py-y1)*dy)/l2 : 0;
+  t = clamp(t,0,1);
+  const cx=x1+t*dx, cy=y1+t*dy;
+  return Math.hypot(px-cx, py-cy);
+}
 function deathCheck(cause,dmg,fx,fy){
   // big obstacles can outright kill if low, else chunk damage; here treat as heavy hit
   hurt(dmg,fx,fy,cause);
@@ -1124,7 +1192,7 @@ function drawBackground(z){
     ctx.fillRect(x,0,28,22); ctx.fillRect(x+14,H-22,28,22);
   }
   // ocean glow as you near the end of the river
-  if (z.level===2 && distance > WIN_DISTANCE-400){
+  if (z.level===3 && distance > WIN_DISTANCE-400){
     const a = clamp((distance-(WIN_DISTANCE-400))/400,0,1);
     const og = ctx.createLinearGradient(W*0.6,0,W,0);
     og.addColorStop(0,"rgba(43,179,224,0)");
@@ -1179,8 +1247,8 @@ function drawEntity(e, z){
   else if (e.k==="power"){
     drawPower(e.x,e.y,e.r,e.kind);
   }
-  else if (e.k==="turdshot"){
-    drawTurdshot(e.x,e.y,e.r,e.spin);
+  else if (e.k==="bshot"){
+    drawBshot(e.x,e.y,e.r,e.spin,e.style);
   }
   else if (e.k==="rock"){
     drawRock(e.x,e.y,e.r);
@@ -1190,6 +1258,12 @@ function drawEntity(e, z){
   }
   else if (e.k==="hook"){
     drawHook(e.x,e.y,e.r);
+  }
+  else if (e.k==="flake"){
+    drawFlake(e.x,e.y,e.r,e.hue);
+  }
+  else if (e.k==="mixer"){
+    drawMixer(e.x,e.pivotY,e.len,e.ang);
   }
   ctx.restore();
 }
@@ -1324,32 +1398,84 @@ function drawHook(x,y,r){
   ctx.beginPath();ctx.moveTo(-6,11);ctx.quadraticCurveTo(-15,16,-8,23);ctx.stroke();
   ctx.restore();
 }
-function drawTurdshot(x,y,r,spin){
+function drawBshot(x,y,r,spin,style){
   ctx.save();ctx.translate(x,y);ctx.rotate(spin||0);
-  ctx.fillStyle="#5b3a1e";
-  ctx.beginPath();ctx.ellipse(0,0,r,r*0.82,0,0,7);ctx.fill();
-  ctx.fillStyle="#6e4a28";
-  ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.35,0,7);ctx.fill();
-  ctx.fillStyle="#3f2814";
-  ctx.beginPath();ctx.arc(r*0.25,r*0.22,r*0.22,0,7);ctx.fill();
+  if (style==="sludge"){          // green sludge glob
+    ctx.fillStyle="#5f7a2e";
+    ctx.beginPath();ctx.ellipse(0,0,r,r*0.85,0,0,7);ctx.fill();
+    ctx.fillStyle="#7a9a3c";ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.34,0,7);ctx.fill();
+    ctx.fillStyle="rgba(190,225,130,0.6)";ctx.beginPath();ctx.arc(r*0.25,r*0.2,r*0.2,0,7);ctx.fill();
+    ctx.fillStyle="#5f7a2e";ctx.beginPath();ctx.moveTo(0,r*0.7);ctx.quadraticCurveTo(r*0.2,r*1.25,0,r*1.35);ctx.quadraticCurveTo(-r*0.2,r*1.25,0,r*0.7);ctx.fill();
+  } else if (style==="log"){      // whittled wooden stake
+    ctx.fillStyle="#6a4423";
+    ctx.beginPath();ctx.ellipse(0,0,r*1.15,r*0.55,0,0,7);ctx.fill();
+    ctx.fillStyle="#8a6236";ctx.beginPath();ctx.ellipse(r*1.0,0,r*0.36,r*0.55,0,0,7);ctx.fill();
+    ctx.strokeStyle="#4e3018";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-r,0);ctx.lineTo(r*0.7,0);ctx.stroke();
+    ctx.fillStyle="#c8a35a";ctx.beginPath();ctx.moveTo(-r*1.15,0);ctx.lineTo(-r*1.7,-r*0.34);ctx.lineTo(-r*1.7,r*0.34);ctx.closePath();ctx.fill();
+  } else {                        // turd pellet
+    ctx.fillStyle="#5b3a1e";
+    ctx.beginPath();ctx.ellipse(0,0,r,r*0.82,0,0,7);ctx.fill();
+    ctx.fillStyle="#6e4a28";ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.35,0,7);ctx.fill();
+    ctx.fillStyle="#3f2814";ctx.beginPath();ctx.arc(r*0.25,r*0.22,r*0.22,0,7);ctx.fill();
+  }
+  ctx.restore();
+}
+// ---- treatment-plant hazards ----
+function drawFlake(x,y,r,hue){
+  ctx.save();ctx.translate(x,y);ctx.rotate((x+y)*0.02);
+  ctx.fillStyle="rgba(200,255,210,0.16)";ctx.beginPath();ctx.arc(0,0,r*1.6,0,7);ctx.fill();
+  ctx.fillStyle=hue||"#bfe6a0";ctx.strokeStyle="rgba(255,255,255,0.75)";ctx.lineWidth=1.2;
+  ctx.beginPath();ctx.moveTo(0,-r);ctx.lineTo(r*0.62,0);ctx.lineTo(0,r);ctx.lineTo(-r*0.62,0);ctx.closePath();
+  ctx.fill();ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,0.6)";
+  ctx.beginPath();ctx.moveTo(0,-r*0.6);ctx.lineTo(r*0.25,0);ctx.lineTo(0,r*0.2);ctx.lineTo(-r*0.25,0);ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+function drawMixer(x,pivotY,len,ang){
+  ctx.save();ctx.translate(x,pivotY);
+  // support column bolted to the ceiling
+  ctx.strokeStyle="rgba(130,140,120,0.45)";ctx.lineWidth=4;
+  ctx.beginPath();ctx.moveTo(0,-pivotY);ctx.lineTo(0,0);ctx.stroke();
+  ctx.rotate(ang);
+  const grad=ctx.createLinearGradient(-len,0,len,0);
+  grad.addColorStop(0,"#8b939c");grad.addColorStop(0.5,"#c2cad2");grad.addColorStop(1,"#8b939c");
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-len,-8,len*2,16,6); else ctx.rect(-len,-8,len*2,16);
+  ctx.fill();
+  ctx.fillStyle="#6f767e";                       // paddle blades at the tips
+  ctx.fillRect(-len,-16,18,32); ctx.fillRect(len-18,-16,18,32);
+  ctx.rotate(-ang);
+  ctx.fillStyle="#4a4f55";ctx.beginPath();ctx.arc(0,0,14,0,7);ctx.fill();
+  ctx.fillStyle="#2f3338";ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();
   ctx.restore();
 }
 
-// ---- THE CLOGFATHER ----
+// ---- BOSSES ----
 function drawBoss(){
-  const b = boss;
-  const R = b.bodyR;
+  if (boss.id==="sludge") return drawBossSludge();
+  if (boss.id==="beaver") return drawBossBeaver();
+  return drawBossClog();
+}
+// shared: the glowing corn weak spot (ctx already translated to the boss centre)
+function drawBossWeakSpot(b){
+  if (b.phase!=="vulnerable") return;
+  const wx=b.wsX-b.x, wy=b.wsY-b.y, pulse=1+Math.sin(b.bob*8)*0.16;
+  ctx.save();ctx.translate(wx,wy);ctx.scale(pulse,pulse);
+  ctx.fillStyle="rgba(255,211,78,0.35)";ctx.beginPath();ctx.arc(0,0,34,0,7);ctx.fill();
+  ctx.fillStyle="#ffd34e";ctx.strokeStyle="#caa12f";ctx.lineWidth=2;
+  ctx.beginPath();ctx.ellipse(0,0,17,23,0,0,7);ctx.fill();ctx.stroke();
+  ctx.fillStyle="rgba(255,255,255,0.7)";ctx.beginPath();ctx.ellipse(-5,-7,5,9,0,0,7);ctx.fill();
+  ctx.restore();
+}
+function drawBossClog(){                          // THE CLOGFATHER — giant turd
+  const b = boss, R = b.bodyR;
   const vuln  = (b.phase==="vulnerable");
   const flash = b.hitFlash>0;
   ctx.save();ctx.translate(b.x,b.y);
-
   if (vuln){ ctx.fillStyle="rgba(150,220,90,0.18)"; ctx.beginPath();ctx.arc(0,0,R*1.65,0,7);ctx.fill(); }
-
-  // stink lines
   ctx.strokeStyle=vuln?"rgba(160,220,90,0.6)":"rgba(150,180,90,0.5)";ctx.lineWidth=3;
   for(let i=-1;i<2;i++){ctx.beginPath();ctx.moveTo(i*24,-R*1.05);ctx.quadraticCurveTo(i*24+10,-R*1.32,i*24,-R*1.58);ctx.stroke();}
-
-  // stacked poop lobes
   const baseCol = flash?"#ffffff":(vuln?"#6b7a3a":"#5b3a1e");
   const hiCol   = vuln?"#88963f":"#6e4a28";
   ctx.fillStyle=baseCol;
@@ -1358,8 +1484,6 @@ function drawBoss(){
     ctx.beginPath();ctx.ellipse(0,yy,rr,rr*0.72,0,0,7);ctx.fill();
   }
   if(!flash){ctx.fillStyle=hiCol;ctx.beginPath();ctx.ellipse(-R*0.35,-R*0.5,R*0.32,R*0.22,0,0,7);ctx.fill();}
-
-  // face
   const eyeY=-R*0.2, pdx=-R*0.06;
   ctx.fillStyle="#fff";
   ctx.beginPath();ctx.arc(-R*0.32,eyeY,R*0.2,0,7);ctx.fill();
@@ -1367,7 +1491,7 @@ function drawBoss(){
   ctx.fillStyle="#10171f";
   ctx.beginPath();ctx.arc(-R*0.32+pdx,eyeY,R*0.1,0,7);ctx.fill();
   ctx.beginPath();ctx.arc( R*0.02+pdx,eyeY,R*0.1,0,7);ctx.fill();
-  if(!vuln){ // angry brows + gritted snarl
+  if(!vuln){
     ctx.strokeStyle="#2a1810";ctx.lineWidth=5;ctx.lineCap="round";
     ctx.beginPath();ctx.moveTo(-R*0.56,eyeY-R*0.3);ctx.lineTo(-R*0.14,eyeY-R*0.12);ctx.stroke();
     ctx.beginPath();ctx.moveTo( R*0.26,eyeY-R*0.3);ctx.lineTo(-R*0.14,eyeY-R*0.12);ctx.stroke();
@@ -1375,23 +1499,90 @@ function drawBoss(){
     ctx.beginPath();ctx.moveTo(-R*0.5,R*0.2);ctx.quadraticCurveTo(-R*0.14,R*0.02,R*0.2,R*0.22);ctx.stroke();
     ctx.fillStyle="#fff";
     for(let i=0;i<4;i++){const tx=-R*0.42+i*R*0.2;ctx.fillRect(tx,R*0.12,R*0.08,R*0.1);}
-  } else { // dizzy sweat + pained "o" mouth
+  } else {
     ctx.fillStyle="#2a1206";
     ctx.beginPath();ctx.ellipse(-R*0.14,R*0.14,R*0.16,R*0.2,0,0,7);ctx.fill();
     ctx.fillStyle="rgba(180,230,255,0.85)";
     ctx.beginPath();ctx.ellipse(R*0.28,-R*0.34,4,7,0,0,7);ctx.fill();
   }
-
-  // glowing corn weak spot (only while stunned) — ram it!
-  if (vuln){
-    const wx=b.wsX-b.x, wy=b.wsY-b.y, pulse=1+Math.sin(b.bob*8)*0.16;
-    ctx.save();ctx.translate(wx,wy);ctx.scale(pulse,pulse);
-    ctx.fillStyle="rgba(255,211,78,0.35)";ctx.beginPath();ctx.arc(0,0,34,0,7);ctx.fill();
-    ctx.fillStyle="#ffd34e";ctx.strokeStyle="#caa12f";ctx.lineWidth=2;
-    ctx.beginPath();ctx.ellipse(0,0,17,23,0,0,7);ctx.fill();ctx.stroke();
-    ctx.fillStyle="rgba(255,255,255,0.7)";ctx.beginPath();ctx.ellipse(-5,-7,5,9,0,0,7);ctx.fill();
-    ctx.restore();
+  drawBossWeakSpot(b);
+  ctx.restore();
+}
+function drawBossSludge(){                         // THE BUTT SLUDGE — a sludgy rear
+  const b = boss, R = b.bodyR;
+  const vuln = (b.phase==="vulnerable"), flash = b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);
+  if(vuln){ctx.fillStyle="rgba(150,220,90,0.18)";ctx.beginPath();ctx.arc(0,0,R*1.7,0,7);ctx.fill();}
+  ctx.strokeStyle=vuln?"rgba(180,230,120,0.6)":"rgba(120,170,70,0.55)";ctx.lineWidth=3;
+  for(let i=-1;i<2;i++){ctx.beginPath();ctx.moveTo(i*26,-R*1.0);ctx.quadraticCurveTo(i*26+10,-R*1.28,i*26,-R*1.5);ctx.stroke();}
+  const base = flash?"#ffffff":(vuln?"#7a8a3a":"#4e6b2a");
+  const hi   = vuln?"#93a24a":"#6b8f3a";
+  ctx.fillStyle=base;                             // two sludgy cheeks
+  ctx.beginPath();ctx.arc(-R*0.5,0,R*0.72,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.5,0,R*0.72,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse(0,R*0.2,R*0.95,R*0.72,0,0,7);ctx.fill();
+  if(!flash){ctx.strokeStyle="#33461c";ctx.lineWidth=5;ctx.lineCap="round";ctx.beginPath();ctx.moveTo(0,-R*0.5);ctx.lineTo(0,R*0.72);ctx.stroke();}
+  if(!flash){ctx.fillStyle=base;                  // drips
+    for(let i=-1;i<2;i++){const dx=i*R*0.55;ctx.beginPath();ctx.moveTo(dx-8,R*0.8);ctx.quadraticCurveTo(dx,R*1.3+((i+1)%2)*10,dx+8,R*0.8);ctx.fill();}}
+  if(!flash){ctx.fillStyle=hi;ctx.beginPath();ctx.ellipse(-R*0.5,-R*0.32,R*0.3,R*0.18,0,0,7);ctx.fill();}
+  const eyeY=-R*0.34;
+  ctx.fillStyle="#fff";
+  ctx.beginPath();ctx.arc(-R*0.26,eyeY,R*0.17,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.26,eyeY,R*0.17,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";
+  ctx.beginPath();ctx.arc(-R*0.31,eyeY,R*0.08,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.21,eyeY,R*0.08,0,7);ctx.fill();
+  if(!vuln){
+    ctx.strokeStyle="#2a3a12";ctx.lineWidth=5;ctx.lineCap="round";
+    ctx.beginPath();ctx.moveTo(-R*0.44,eyeY-R*0.24);ctx.lineTo(-R*0.1,eyeY-R*0.08);ctx.stroke();
+    ctx.beginPath();ctx.moveTo( R*0.44,eyeY-R*0.24);ctx.lineTo( R*0.1,eyeY-R*0.08);ctx.stroke();
+    ctx.strokeStyle="#25330f";ctx.beginPath();ctx.moveTo(-R*0.24,-R*0.02);ctx.quadraticCurveTo(0,-R*0.16,R*0.24,-R*0.02);ctx.stroke();
+  } else {
+    ctx.fillStyle="#25330f";ctx.beginPath();ctx.ellipse(0,-R*0.08,R*0.13,R*0.17,0,0,7);ctx.fill();
+    ctx.fillStyle="rgba(180,230,255,0.85)";ctx.beginPath();ctx.ellipse(R*0.34,-R*0.42,4,7,0,0,7);ctx.fill();
   }
+  drawBossWeakSpot(b);
+  ctx.restore();
+}
+function drawBossBeaver(){                         // THE DAM BEAVER — river engineer
+  const b = boss, R = b.bodyR;
+  const vuln = (b.phase==="vulnerable"), flash = b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);
+  if(vuln){ctx.fillStyle="rgba(150,220,90,0.18)";ctx.beginPath();ctx.arc(0,0,R*1.7,0,7);ctx.fill();}
+  // flat cross-hatched paddle tail
+  ctx.save();ctx.translate(R*1.0,R*0.4);ctx.rotate(0.5);
+  ctx.fillStyle=flash?"#ffffff":"#5a3a20";
+  ctx.beginPath();ctx.ellipse(0,0,R*0.55,R*0.32,0,0,7);ctx.fill();
+  ctx.strokeStyle="#3f2814";ctx.lineWidth=1.5;
+  for(let i=-2;i<=2;i++){ctx.beginPath();ctx.moveTo(i*R*0.18,-R*0.28);ctx.lineTo(i*R*0.18,R*0.28);ctx.stroke();}
+  for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(-R*0.5,i*R*0.16);ctx.lineTo(R*0.5,i*R*0.16);ctx.stroke();}
+  ctx.restore();
+  const base = flash?"#ffffff":(vuln?"#8a7a4a":"#7a5330");
+  ctx.fillStyle=base;                             // body
+  ctx.beginPath();ctx.ellipse(0,R*0.1,R*0.95,R*0.92,0,0,7);ctx.fill();
+  if(!flash){ctx.fillStyle=vuln?"#9a8a58":"#9a6a3e";ctx.beginPath();ctx.ellipse(-R*0.08,R*0.32,R*0.5,R*0.55,0,0,7);ctx.fill();}
+  ctx.fillStyle=base;                             // ears
+  ctx.beginPath();ctx.arc(-R*0.5,-R*0.72,R*0.16,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.5,-R*0.72,R*0.16,0,7);ctx.fill();
+  const eyeY=-R*0.42;
+  ctx.fillStyle="#fff";
+  ctx.beginPath();ctx.arc(-R*0.26,eyeY,R*0.15,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.26,eyeY,R*0.15,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";
+  ctx.beginPath();ctx.arc(-R*0.3,eyeY,R*0.075,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.22,eyeY,R*0.075,0,7);ctx.fill();
+  if(!vuln){
+    ctx.strokeStyle="#3f2814";ctx.lineWidth=5;ctx.lineCap="round";
+    ctx.beginPath();ctx.moveTo(-R*0.44,eyeY-R*0.22);ctx.lineTo(-R*0.12,eyeY-R*0.06);ctx.stroke();
+    ctx.beginPath();ctx.moveTo( R*0.44,eyeY-R*0.22);ctx.lineTo( R*0.12,eyeY-R*0.06);ctx.stroke();
+  } else {
+    ctx.fillStyle="rgba(180,230,255,0.85)";ctx.beginPath();ctx.ellipse(R*0.34,eyeY-R*0.02,4,7,0,0,7);ctx.fill();
+  }
+  ctx.fillStyle="#2a1a12";ctx.beginPath();ctx.ellipse(0,-R*0.12,R*0.14,R*0.1,0,0,7);ctx.fill();   // nose
+  ctx.fillStyle="#fff";ctx.strokeStyle="#c9b98a";ctx.lineWidth=1;                                  // buck teeth
+  ctx.fillRect(-R*0.13,-R*0.02,R*0.12,R*0.3);ctx.strokeRect(-R*0.13,-R*0.02,R*0.12,R*0.3);
+  ctx.fillRect( R*0.01,-R*0.02,R*0.12,R*0.3);ctx.strokeRect( R*0.01,-R*0.02,R*0.12,R*0.3);
+  drawBossWeakSpot(b);
   ctx.restore();
 }
 
@@ -1491,7 +1682,7 @@ function drawHUD(z){
   ctx.fillStyle="#dfeede";ctx.font="bold 11px monospace";ctx.textAlign="left";
   ctx.fillText("HEALTH",bx+4,by+12);
 
-  // boss health bar (centered, while THE CLOGFATHER lives)
+  // boss health bar (centered, while a boss lives)
   if (bossActive && boss){
     const cbw=360, cbh=15, cbx=(W-cbw)/2, cby=30;
     ctx.fillStyle="rgba(0,0,0,0.5)";ctx.fillRect(cbx-3,cby-3,cbw+6,cbh+6);
@@ -1500,7 +1691,7 @@ function drawHUD(z){
     ctx.fillStyle="#9a6a34";ctx.fillRect(cbx,cby,cbw*r,cbh);
     ctx.strokeStyle="rgba(255,220,150,0.4)";ctx.lineWidth=1;ctx.strokeRect(cbx,cby,cbw,cbh);
     ctx.fillStyle="#ffe0a8";ctx.font="bold 11px monospace";ctx.textAlign="center";
-    ctx.fillText("THE CLOGFATHER",W/2,cby+11);
+    ctx.fillText(boss.name,W/2,cby+11);
     if (boss.phase==="vulnerable"){
       ctx.fillStyle="#ffd34e";ctx.font="bold 15px monospace";
       ctx.fillText("▶ SWIM INTO THE GLOWING CORN! ◀",W/2,cby+42);
@@ -1511,23 +1702,27 @@ function drawHUD(z){
   }
 
   // distance / progress
+  const LEVELS = {1:["① THE SEWER","#c9a06a"], 2:["② TREATMENT PLANT","#c7d060"], 3:["③ THE RIVER","#7fd6f0"]};
+  const lv = LEVELS[curLevel] || LEVELS[1];
   ctx.textAlign="right";
   ctx.font="bold 18px monospace";ctx.fillStyle="#fff";
   ctx.fillText(Math.floor(distance)+" m",W-16,30);
   ctx.font="12px monospace";ctx.fillStyle="#bcd3c0";
   ctx.fillText("🌽 "+cornEaten,W-16,48);
   ctx.fillStyle="#9fb7a3";ctx.fillText("Lv "+difficulty,W-16,66);
-  ctx.fillStyle=curLevel===2?"#7fd6f0":"#c9a06a";
-  ctx.fillText(curLevel===2?"② THE RIVER":"① THE SEWER",W-16,84);
+  ctx.fillStyle=lv[1];ctx.fillText(lv[0],W-16,84);
 
-  // progress bar to ocean (boss gate marked at the sewer/river seam)
+  // progress bar to ocean, with each level's boss gate marked
   const pw=W-32, pbY=H-14;
   ctx.fillStyle="rgba(0,0,0,0.4)";ctx.fillRect(16,pbY-3,pw,6);
   ctx.fillStyle="#2bb3e0";ctx.fillRect(16,pbY-3,pw*clamp(distance/WIN_DISTANCE,0,1),6);
-  const bmx = 16+pw*(BOSS_DISTANCE/WIN_DISTANCE);
-  ctx.fillStyle=bossDefeated?"#6a8f4a":"#d8b24a";ctx.fillRect(bmx-1,pbY-6,2,12);
-  ctx.font="11px monospace";ctx.textAlign="center";
-  ctx.fillText(bossDefeated?"✓":"💩",bmx,pbY-8);
+  const GATE_ICON = {clog:"💩", sludge:"🍑", beaver:"🦫"};
+  for (const g of BOSS_GATES){
+    const gmx = 16+pw*(g.at/WIN_DISTANCE), done=bossesDone[g.id];
+    ctx.fillStyle=done?"#6a8f4a":"#d8b24a";ctx.fillRect(gmx-1,pbY-6,2,12);
+    ctx.font="11px monospace";ctx.textAlign="center";
+    ctx.fillText(done?"✓":GATE_ICON[g.id],gmx,pbY-8);
+  }
   ctx.fillStyle="#fff";ctx.font="14px monospace";ctx.textAlign="right";
   ctx.fillText("🌊",16+pw,pbY+1);
 

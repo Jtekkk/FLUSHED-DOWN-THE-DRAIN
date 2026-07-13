@@ -32,14 +32,27 @@ Soap Bubble — encases you, briefly invincible + faster, but you can't change d
 Hot Sauce Packet — speed burst. High risk, high distance, eats your control window.
 
 Structure & Progression
-Run it as escalating zones, each a few seconds long, getting faster and filthier:
+Three levels, each an escalating run of zones capped by a boss that dams the
+current until you beat it. Every boss follows the same tell: it looms out of
+reach lobbing attacks (dodge), then clogs up and drifts into range exposing a
+glowing corn weak spot — swim into the corn to damage it.
 
-The Bowl Drop — short intro, gentle current.
-Residential Pipes — basic floaters, learn the rhythm.
-The Main Line — everything merges, traffic gets thick, first rats.
-Treatment Plant — the boss-ish gauntlet: churning filters, plunger walls, a final narrow grate.
-The Outflow — light at the end of the pipe. Sprint section. Sky opens up.
-OCEAN — win screen. Reginald breaks the surface, gulps clean salt water, freedom.
+LEVEL 1 · THE SEWER
+  The Bowl Drop → Residential Pipes → The Main Line (floaters, TP, grates, rats).
+  BOSS: THE CLOGFATHER — a giant turd that spits poop pellets.
+
+LEVEL 2 · THE TREATMENT PLANT
+  The Settling Tanks → The Aeration Basin → The Clarifier.
+  New hazards: chemical flakes raining down, and spinning mixer arms to time.
+  BOSS: THE BUTT SLUDGE — a sludgy rear that flings green globs.
+
+LEVEL 3 · THE RIVER
+  The River Mouth → Down the River → The Estuary (rocks, logs, fish hooks).
+  Cleaner water, gentler drain — but the river has an engineer.
+  BOSS: THE DAM BEAVER — hurls whittled wooden stakes.
+
+OCEAN — win screen. Reginald breaks the surface, gulps clean salt water, freedom,
+and picks his own (frequently ill-advised) happily-ever-after.
 
 Scoring
 
