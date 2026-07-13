@@ -255,10 +255,6 @@ let thrust = false;
 let distance, scroll, cornEaten, runTime, shake, flash, bgFlow, zoneName;
 let player, ents, parts, spawnTimer, powerTimer, ratTimer, lastZone;
 let boss = null, bossActive = false, bossesDone = {}, curLevel = 1;
-let sublim = null, sublimTimer = 0;   // barely-there "subliminal" flashes
-
-// ...totally normal messages the sewer definitely is NOT whispering to you...
-const SUBLIMINAL = ["POOP","TURD","BUTT","SEX"];
 
 // ---------- helpers ----------
 const rand = (a,b)=> a + Math.random()*(b-a);
@@ -365,7 +361,6 @@ function reset(){
   powerTimer = rand(6,9);
   ratTimer = 999;
   boss = null; bossActive = false; bossesDone = {}; curLevel = 1;
-  sublim = null; sublimTimer = rand(4, 8);
 }
 
 // ---------- zones ----------
@@ -952,13 +947,6 @@ function update(dt){
   if (zoneName) zoneName.t -= dt;
   if (nowPlaying) nowPlaying.t -= dt;
 
-  // ---- subliminal flashes (definitely nothing to worry about) ----
-  sublimTimer -= dt;
-  if (sublimTimer <= 0){
-    sublim = { txt: SUBLIMINAL[(Math.random()*SUBLIMINAL.length)|0], frames: 1 }; // one frame only
-    sublimTimer = rand(4.5, 9.0);
-  }
-
   // ---- player physics ----
   const GRAV = 900, THR = -1500, MAXV = 520;
   player.vy += (thrust ? THR : GRAV) * dt;
@@ -1172,20 +1160,6 @@ function draw(){
 
   // HUD
   if (state===STATE.PLAY || state===STATE.DEAD) drawHUD(z);
-
-  // subliminal flash — ONE frame (~16ms) AND near-threshold opacity, so it
-  // registers below conscious perception rather than reading as a bright flash
-  if (sublim && sublim.frames>0 && state===STATE.PLAY){
-    ctx.save();
-    ctx.globalAlpha = 0.08;                     // faint ghost, not a flash
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.font = "bold 46px monospace";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(sublim.txt, W/2, H*0.46);
-    ctx.restore();
-    ctx.textBaseline = "alphabetic";
-    if (--sublim.frames <= 0) sublim = null;   // consumed after a single render
-  }
 }
 
 function drawBackground(z){
