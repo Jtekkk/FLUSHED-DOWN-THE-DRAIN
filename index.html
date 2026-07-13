@@ -955,10 +955,9 @@ function update(dt){
   // ---- subliminal flashes (definitely nothing to worry about) ----
   sublimTimer -= dt;
   if (sublimTimer <= 0){
-    sublim = { txt: SUBLIMINAL[(Math.random()*SUBLIMINAL.length)|0], t: 0.14, dur: 0.14 };
+    sublim = { txt: SUBLIMINAL[(Math.random()*SUBLIMINAL.length)|0], frames: 1 }; // one frame only
     sublimTimer = rand(4.5, 9.0);
   }
-  if (sublim){ sublim.t -= dt; if (sublim.t <= 0) sublim = null; }
 
   // ---- player physics ----
   const GRAV = 900, THR = -1500, MAXV = 520;
@@ -1174,17 +1173,17 @@ function draw(){
   // HUD
   if (state===STATE.PLAY || state===STATE.DEAD) drawHUD(z);
 
-  // subliminal flash — a blink of text, gone before you're sure you saw it
-  if (sublim && state===STATE.PLAY){
-    const a = clamp(sublim.t/sublim.dur, 0, 1) * 0.6;   // gentle, never a hard strobe
+  // subliminal flash — drawn for exactly ONE frame (~16ms), too brief to read
+  if (sublim && sublim.frames>0 && state===STATE.PLAY){
     ctx.save();
-    ctx.globalAlpha = a;
+    ctx.globalAlpha = 0.55;
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = "bold 46px monospace";
     ctx.fillStyle = "#ffffff";
     ctx.fillText(sublim.txt, W/2, H*0.46);
     ctx.restore();
     ctx.textBaseline = "alphabetic";
+    if (--sublim.frames <= 0) sublim = null;   // consumed after a single render
   }
 }
 
