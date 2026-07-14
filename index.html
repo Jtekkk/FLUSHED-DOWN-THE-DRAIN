@@ -124,11 +124,11 @@
     <!-- TITLE -->
     <div class="screen" id="screen-title">
       <h1>FLUSHED<small>DOWN THE DRAIN</small></h1>
-      <p class="tag">You are <b>Sir Reginald Bubbles III</b>, a beloved family goldfish — just <i>unceremoniously flushed</i>. Fight through <b>3 levels</b> — the <b>SEWER</b>, the <b>TREATMENT PLANT</b>, and the <b>RIVER</b> — beating the boss at the end of each to reach the open <b>OCEAN</b>.</p>
+      <p class="tag">You are <b>Sir Reginald Bubbles III</b>, a beloved family goldfish — just <i>unceremoniously flushed</i>. Fight through <b>9 levels</b> — sewer, treatment plant, river, harbor, reef, kelp forest, open ocean, the midnight deep, and the trench — beating the boss at the end of each to reach the open <b>OCEAN</b>.</p>
       <div class="controls">
         <span class="key">CLICK</span> / <span class="key">TAP</span> / <span class="key">SPACE</span> &nbsp;hold to swim up · release to sink<br>
-        🌽 corn = health &nbsp;·&nbsp; dodge 💩 filth, ❖ chemical flakes, ⚙ mixer arms, 🪨 rocks &amp; 🪝 hooks<br>
-        BOSSES 💩🍑🦫 : dodge their attacks, then <b>ram the glowing 🌽</b> weak spot
+        🌽 corn = health &nbsp;·&nbsp; dodge filth, flakes, mixers, oil, jellyfish, urchins, nets &amp; hooks<br>
+        9 BOSSES 💩🍑🦫🦀🪼🐙🦈🎣🦑 : dodge their attacks, then <b>ram the glowing 🌽</b> weak spot
       </div>
       <div class="diffwrap">
         <div class="difftitle">DIFFICULTY 1–10</div>
@@ -229,24 +229,128 @@ const elEnd   = document.getElementById('screen-ending');
 const STATE = { TITLE:0, PLAY:1, DEAD:2, WIN:3, ENDING:4 };
 let state = STATE.TITLE;
 
-const WIN_DISTANCE = 2400;        // meters to the open ocean (through 3 levels)
 let best = 0;
 
-// Three levels, each capped by a boss that freezes the current until beaten.
-//   gate = distance the boss blocks; arena = the backdrop while you fight it.
-const BOSSES = {
-  clog:   { name:"THE CLOGFATHER", gate:700,  hp:100, level:1, bodyR:70,
-            arena:{level:1, name:"SEWER'S END",     tint:"#2a1016", flow:"#3a1420", intensity:0.25} },
-  sludge: { name:"THE BUTT SLUDGE", gate:1400, hp:120, level:2, bodyR:76,
-            arena:{level:2, name:"THE DIGESTER",     tint:"#25301a", flow:"#3d4a20", intensity:0.3} },
-  beaver: { name:"THE DAM BEAVER",  gate:2200, hp:130, level:3, bodyR:66,
-            arena:{level:3, name:"THE BEAVER DAM",   tint:"#123a30", flow:"#1f6a54", intensity:0.2} },
-};
-const BOSS_GATES = [
-  { at: BOSSES.clog.gate,   id:"clog" },
-  { at: BOSSES.sludge.gate, id:"sludge" },
-  { at: BOSSES.beaver.gate, id:"beaver" },
+// ---------- the world: 9 levels, each 3 zones long and capped by a boss ----------
+const LEVEL_LEN = 560;            // distance travelled per level before its boss
+const FINAL_OCEAN_LEN = 240;      // victory swim after the final boss
+const LEVEL_DEFS = [
+  { level:1, label:"THE SEWER", col:"#c9a06a",
+    boss:{id:"clog", name:"THE CLOGFATHER", hp:100, bodyR:70, shot:"turd",
+          arena:{name:"SEWER'S END", tint:"#2a1016", flow:"#3a1420", intensity:0.25}},
+    zones:[
+      {name:"THE BOWL DROP",     tint:"#163b2b", flow:"#1f5740", intensity:0.0,  types:["floater"]},
+      {name:"RESIDENTIAL PIPES", tint:"#173026", flow:"#234f3a", intensity:0.35, types:["floater","floater","tp"]},
+      {name:"THE MAIN LINE",     tint:"#241f17", flow:"#3a3020", intensity:0.6, rats:true, types:["floater","tp","grate","floater"]},
+    ]},
+  { level:2, label:"TREATMENT PLANT", col:"#c7d060",
+    boss:{id:"sludge", name:"THE BUTT SLUDGE", hp:120, bodyR:76, shot:"sludge",
+          arena:{name:"THE DIGESTER", tint:"#25301a", flow:"#3d4a20", intensity:0.3}},
+    zones:[
+      {name:"THE SETTLING TANKS", tint:"#2a2612", flow:"#454018", intensity:0.4,  types:["flake","tp","flake","grate"]},
+      {name:"THE AERATION BASIN", tint:"#262e14", flow:"#3f4a1c", intensity:0.7,  types:["mixer","flake","mixer","grate"]},
+      {name:"THE CLARIFIER",      tint:"#242a16", flow:"#3a461e", intensity:0.85, types:["mixer","flake","mixer","flake"]},
+    ]},
+  { level:3, label:"THE RIVER", col:"#7fd6f0",
+    boss:{id:"beaver", name:"THE DAM BEAVER", hp:130, bodyR:66, shot:"log",
+          arena:{name:"THE BEAVER DAM", tint:"#123a30", flow:"#1f6a54", intensity:0.2}},
+    zones:[
+      {name:"THE RIVER MOUTH", tint:"#123b3c", flow:"#1f6f70", intensity:0.3,  clean:true, types:["rock","log","rock"]},
+      {name:"DOWN THE RIVER",  tint:"#134a44", flow:"#26887a", intensity:0.55, clean:true, sprint:true, types:["rock","log","hook","grate"]},
+      {name:"THE ESTUARY",     tint:"#124a57", flow:"#1f88a0", intensity:0.4,  clean:true, types:["log","hook","rock"]},
+    ]},
+  { level:4, label:"THE HARBOR", col:"#9fb6c6",
+    boss:{id:"crab", name:"THE KING CRAB", hp:140, bodyR:70, shot:"bubble",
+          arena:{name:"THE DRY DOCK", tint:"#16222c", flow:"#284354", intensity:0.35}},
+    zones:[
+      {name:"THE MARINA",     tint:"#182430", flow:"#274058", intensity:0.4, types:["oil","anchor","grate"]},
+      {name:"OILY DOCKS",     tint:"#141d26", flow:"#22384a", intensity:0.6, types:["oil","mixer","oil","anchor"]},
+      {name:"THE BREAKWATER", tint:"#152631", flow:"#264a5c", intensity:0.5, sprint:true, types:["anchor","oil","grate"]},
+    ]},
+  { level:5, label:"THE CORAL REEF", col:"#ff9ec4",
+    boss:{id:"jelly", name:"THE JELLY KING", hp:150, bodyR:64, shot:"sting",
+          arena:{name:"THE LAGOON", tint:"#123a4e", flow:"#1f7aa0", intensity:0.2, clean:true}},
+    zones:[
+      {name:"THE SHALLOWS",  tint:"#13506a", flow:"#26a0c0", intensity:0.3, clean:true, types:["jelly","rock","jelly"]},
+      {name:"CORAL GARDEN",  tint:"#164a64", flow:"#2f96b8", intensity:0.5, clean:true, types:["urchin","jelly","rock"]},
+      {name:"ANEMONE ALLEY", tint:"#12465e", flow:"#268aac", intensity:0.6, clean:true, types:["jelly","urchin","grate"]},
+    ]},
+  { level:6, label:"THE KELP FOREST", col:"#8ad07a",
+    boss:{id:"octo", name:"THE GIANT OCTOPUS", hp:160, bodyR:72, shot:"ink",
+          arena:{name:"THE INK CLOUD", tint:"#0e2e2a", flow:"#1a5048", intensity:0.3, clean:true}},
+    zones:[
+      {name:"THE KELP MAZE", tint:"#123a2a", flow:"#1f6a48", intensity:0.4, clean:true, types:["kelp","urchin","kelp"]},
+      {name:"TANGLED DEEP",  tint:"#103228", flow:"#1c5c42", intensity:0.6, clean:true, types:["kelp","jelly","kelp"]},
+      {name:"OTTER COVE",    tint:"#123626", flow:"#20643e", intensity:0.5, clean:true, types:["urchin","kelp","jelly"]},
+    ]},
+  { level:7, label:"THE OPEN OCEAN", col:"#5fb8e0",
+    boss:{id:"shark", name:"THE GREAT WHITE", hp:170, bodyR:74, shot:"tooth",
+          arena:{name:"OPEN WATER", tint:"#0e4a72", flow:"#1f7fc0", intensity:0.15, clean:true}},
+    zones:[
+      {name:"THE BIG BLUE", tint:"#0e4a72", flow:"#1f7fc0", intensity:0.25, clean:true, types:["net","jelly","hook"]},
+      {name:"TRAWLER LANE", tint:"#0d4468", flow:"#1d76b4", intensity:0.55, clean:true, sprint:true, types:["net","hook","net"]},
+      {name:"SHARK WATERS", tint:"#0c405f", flow:"#1b6ea6", intensity:0.4, clean:true, types:["hook","jelly","net"]},
+    ]},
+  { level:8, label:"THE MIDNIGHT ZONE", col:"#9a86e0",
+    boss:{id:"angler", name:"THE ANGLERFISH", hp:180, bodyR:66, shot:"lure",
+          arena:{name:"PITCH BLACK", tint:"#070a14", flow:"#12203a", intensity:0.3, clean:true, dark:true}},
+    zones:[
+      {name:"THE TWILIGHT",    tint:"#0a1424", flow:"#182a44", intensity:0.35, clean:true, dark:true, types:["snow","jelly","snow"]},
+      {name:"THE DARK",        tint:"#070e1a", flow:"#122036", intensity:0.55, clean:true, dark:true, types:["snow","hook","snow"]},
+      {name:"BIOLUMINESCENCE", tint:"#081522", flow:"#153050", intensity:0.5, clean:true, dark:true, types:["hook","snow","jelly"]},
+    ]},
+  { level:9, label:"THE TRENCH", col:"#c07ad0",
+    boss:{id:"kraken", name:"THE KRAKEN", hp:220, bodyR:82, shot:"ink",
+          arena:{name:"THE KRAKEN'S LAIR", tint:"#0a0f1a", flow:"#182844", intensity:0.35, clean:true, dark:true}},
+    zones:[
+      {name:"THE DESCENT",   tint:"#0a1020", flow:"#16223c", intensity:0.4, clean:true, dark:true, types:["net","urchin","rock"]},
+      {name:"KRAKEN'S GATE", tint:"#090e1c", flow:"#141f38", intensity:0.6, clean:true, dark:true, types:["urchin","rock","net"]},
+      {name:"THE ABYSS",     tint:"#080c18", flow:"#111c32", intensity:0.7, clean:true, dark:true, types:["rock","urchin","net"]},
+    ]},
 ];
+const OCEAN_ZONE = {level:10, name:"THE OPEN OCEAN", tint:"#0e5a78", flow:"#1f8fc0", intensity:0.1, clean:true, types:["jelly"]};
+
+// projectile flavour, shared by bosses that use the same ammo
+const SHOT_PARAMS = {
+  turd:  {n:3, spd:[205,255], big:0.22, spread:0.62, size:13, sizeBig:20},
+  sludge:{n:4, spd:[178,222], big:0.30, spread:0.80, size:15, sizeBig:23},
+  log:   {n:3, spd:[240,300], big:0.35, spread:0.42, size:15, sizeBig:22},
+  bubble:{n:4, spd:[190,240], big:0.25, spread:0.90, size:14, sizeBig:20},
+  sting: {n:5, spd:[168,214], big:0.20, spread:1.00, size:12, sizeBig:18},
+  ink:   {n:4, spd:[198,248], big:0.30, spread:0.72, size:16, sizeBig:24},
+  tooth: {n:3, spd:[258,320], big:0.30, spread:0.50, size:13, sizeBig:19},
+  lure:  {n:4, spd:[196,244], big:0.25, spread:0.78, size:12, sizeBig:18},
+};
+const SHOT_SPLAT = { turd:"#7a4a22", sludge:"#6b8f3a", log:"#8a5a30", bubble:"#8fd0ff",
+                     sting:"#e07ac0", ink:"#3a3550", tooth:"#e8eef2", lure:"#ffd36a" };
+const GATE_ICON  = { clog:"💩", sludge:"🍑", beaver:"🦫", crab:"🦀", jelly:"🪼",
+                     octo:"🐙", shark:"🦈", angler:"🎣", kraken:"🦑" };
+
+// build the flat lookups the engine uses from the level defs above
+const ZONE_BANDS = [];
+const BOSS_GATES = [];
+const BOSSES = {};
+const LEVEL_LABEL = {};
+let WIN_DISTANCE;
+(function buildWorld(){
+  let start = 0;
+  for (const L of LEVEL_DEFS){
+    LEVEL_LABEL[L.level] = { txt:L.label, col:L.col };
+    const seg = LEVEL_LEN / L.zones.length;
+    L.zones.forEach((z,i)=>{
+      ZONE_BANDS.push({ hi: start + (i+1)*seg,
+        zone: Object.assign({level:L.level, rats:!!z.rats, clean:!!z.clean, sprint:!!z.sprint, dark:!!z.dark}, z) });
+    });
+    start += LEVEL_LEN;
+    const b = L.boss;
+    BOSSES[b.id] = { name:b.name, gate:start, hp:b.hp, level:L.level, bodyR:b.bodyR, shot:b.shot,
+      arena: Object.assign({level:L.level, clean:!!b.arena.clean, dark:!!b.arena.dark}, b.arena) };
+    BOSS_GATES.push({ at:start, id:b.id });
+  }
+  LEVEL_LABEL[OCEAN_ZONE.level] = { txt:"THE OPEN OCEAN", col:"#7fe0ff" };
+  WIN_DISTANCE = start + FINAL_OCEAN_LEN;
+})();
+const bossCause = id => id==="clog" ? "boss" : id;
 
 // input
 let thrust = false;
@@ -364,21 +468,11 @@ function reset(){
 }
 
 // ---------- zones ----------
-// L1 THE SEWER (0–700) · L2 THE TREATMENT PLANT (700–1400) · L3 THE RIVER (1400–2400).
+// 9 levels wired from LEVEL_DEFS into ZONE_BANDS; beyond the last band lies the
+// open-ocean victory stretch (OCEAN_ZONE).
 function zoneFor(d){
-  // ---- LEVEL 1 · THE SEWER ----
-  if (d < 150)  return {level:1, name:"THE BOWL DROP",     tint:"#163b2b", flow:"#1f5740", rats:false, intensity:0.0,  types:["floater"]};
-  if (d < 340)  return {level:1, name:"RESIDENTIAL PIPES", tint:"#173026", flow:"#234f3a", rats:false, intensity:0.35, types:["floater","floater","tp"]};
-  if (d < 700)  return {level:1, name:"THE MAIN LINE",     tint:"#241f17", flow:"#3a3020", rats:true,  intensity:0.6,  types:["floater","tp","grate","floater"]};
-  // ---- LEVEL 2 · THE TREATMENT PLANT (chemical flakes + mixer arms) ----
-  if (d < 950)  return {level:2, name:"THE SETTLING TANKS", tint:"#2a2612", flow:"#454018", rats:false, intensity:0.4,  types:["flake","tp","flake","grate"]};
-  if (d < 1200) return {level:2, name:"THE AERATION BASIN", tint:"#262e14", flow:"#3f4a1c", rats:false, intensity:0.7,  types:["mixer","flake","mixer","grate"]};
-  if (d < 1400) return {level:2, name:"THE CLARIFIER",      tint:"#242a16", flow:"#3a461e", rats:false, intensity:0.85, types:["mixer","flake","mixer","flake"]};
-  // ---- LEVEL 3 · THE RIVER ----
-  if (d < 1680) return {level:3, name:"THE RIVER MOUTH",   tint:"#123b3c", flow:"#1f6f70", rats:false, intensity:0.3,  clean:true, types:["rock","log","rock"]};
-  if (d < 1940) return {level:3, name:"DOWN THE RIVER",    tint:"#134a44", flow:"#26887a", rats:false, intensity:0.55, clean:true, sprint:true, types:["rock","log","hook","grate"]};
-  if (d < 2200) return {level:3, name:"THE ESTUARY",       tint:"#124a57", flow:"#1f88a0", rats:false, intensity:0.4,  clean:true, types:["log","hook","rock"]};
-  return          {level:3, name:"OCEAN AHEAD",     tint:"#0e5a78", flow:"#1f8fc0", rats:false, intensity:0.15, clean:true, types:["log"]};
+  for (const b of ZONE_BANDS) if (d < b.hi) return b.zone;
+  return OCEAN_ZONE;
 }
 // Zone in effect right now (a boss freezes the world in its own arena).
 function currentZone(){ return (bossActive && boss) ? boss.zone : zoneFor(distance); }
@@ -422,6 +516,28 @@ function spawn(z){
     const len = rand(130,168) + DIFF.gapBonus*0.4;
     ents.push({k:"mixer", x:W+50, pivotY:H*0.5+rand(-40,40), len,
       ang:rand(0,7), spd:(chance(0.5)?1:-1)*rand(1.2,2.1)});
+  } else if (t === "oil"){
+    const big = chance(0.3);
+    ents.push({k:"oil", x:W+40, y:rand(60,H-60), r: big?30:20, vy:rand(-14,14), big});
+  } else if (t === "anchor"){
+    ents.push({k:"anchor", x:W+rand(20,90), y:rand(-70,0), r:22, vy:rand(120,190)});
+  } else if (t === "jelly"){
+    const baseY = rand(90,H-90);
+    ents.push({k:"jelly", x:W+40, baseY, y:baseY, r:rand(16,24), ph:rand(0,7), amp:rand(28,66)});
+  } else if (t === "urchin"){
+    const big = chance(0.3);
+    ents.push({k:"urchin", x:W+40, y:rand(70,H-70), r: big?22:17, vy:rand(-8,8), big});
+  } else if (t === "snow"){
+    const n = 2 + (chance(0.5)?1:0);
+    for (let i=0;i<n;i++)
+      ents.push({k:"snow", x:W+30+rand(0,52), y:rand(-50,20), r:rand(6,10),
+        vy:rand(50,100), sway:rand(0,7), hue:"#dfeaf5"});
+  } else if (t === "kelp"){
+    const gapY = rand(120,H-120), gapH = rand(120,158) + DIFF.gapBonus;
+    ents.push({k:"kelp", x:W+30, gapY, gapH, ph:rand(0,7)});
+  } else if (t === "net"){
+    const gapY = rand(120,H-120), gapH = rand(120,165) + DIFF.gapBonus;
+    ents.push({k:"net", x:W+30, gapY, gapH});
   }
   // corn sprinkled with most spawns
   if (chance(DIFF.cornFreq)){
@@ -456,18 +572,13 @@ function spawnPower(){
 // Only the artwork (drawBoss*) and the projectile flavour (bossShoot) differ.
 const BOSS_ATTACK_X = W*0.75;
 const BOSS_VULN_X   = W*0.40;
-const BOSS_SPLAT = { clog:"#7a4a22", sludge:"#6b8f3a", beaver:"#8a5a30" };
-const BOSS_SHOT = {
-  clog:   {style:"turd",   cause:"boss",   n:3, spd:[205,255], big:0.22, spread:0.62, size:13, sizeBig:20},
-  sludge: {style:"sludge", cause:"sludge", n:4, spd:[178,222], big:0.30, spread:0.80, size:15, sizeBig:23},
-  beaver: {style:"log",    cause:"beaver", n:3, spd:[240,300], big:0.35, spread:0.42, size:15, sizeBig:22},
-};
 function startBoss(id, at){
   const def = BOSSES[id];
   bossActive = true;
   distance = at;                                  // freeze the run at the gate
   ents = ents.filter(e => e.k === "corn" && !e.fired);
   boss = { id, name:def.name, gateAt:at, zone:def.arena,
+           shot:def.shot, splat:SHOT_SPLAT[def.shot], cause:bossCause(id),
            hp:def.hp, maxhp:def.hp, x:W+200, y:H*0.5, phase:"intro", timer:2.4,
            bob:0, iframe:0, hitFlash:0, shootT:0, wsX:0, wsY:0, bodyR:def.bodyR };
   zoneName = {txt:"⚠ "+def.name+" ⚠", t:3.2};
@@ -475,14 +586,14 @@ function startBoss(id, at){
   try { Music.playRandom(); } catch(e){}
 }
 function bossShoot(){
-  const b = boss, cfg = BOSS_SHOT[b.id];
+  const b = boss, cfg = SHOT_PARAMS[b.shot];
   const n = cfg.n + Math.min(3, Math.floor(DIFF.level/3));
   for (let i=0;i<n;i++){
     const frac = n>1 ? i/(n-1) : 0.5;
     const ang  = Math.PI - cfg.spread/2 + frac*cfg.spread + rand(-0.05,0.05);
     const spd  = rand(cfg.spd[0], cfg.spd[1]) + DIFF.level*8;
     const big  = chance(cfg.big);
-    ents.push({k:"bshot", style:cfg.style, cause:cfg.cause, fired:true,
+    ents.push({k:"bshot", style:b.shot, cause:b.cause, fired:true,
       x:b.x-46, y:b.y+rand(-28,28),
       vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd*1.15,
       r: big?cfg.sizeBig:cfg.size, big, spin:rand(0,7)});
@@ -491,7 +602,7 @@ function bossShoot(){
     ents.push({k:"corn", fired:true, x:b.x-46, y:b.y+rand(-70,70), r:9,
       vx:-rand(150,205), vy:rand(-45,45), eaten:false, born:0});
   }
-  burst(b.x-34, b.y, BOSS_SPLAT[b.id], 8, 130);
+  burst(b.x-34, b.y, b.splat, 8, 130);
 }
 function bossHit(){
   const b = boss;
@@ -501,7 +612,7 @@ function bossHit(){
   player.vy = -320;                              // knock the fish clear
   player.iframe = Math.max(player.iframe, 0.35);
   burst(b.wsX, b.wsY, "#ffd34e", 16, 240);
-  burst(b.wsX, b.wsY, BOSS_SPLAT[b.id], 10, 180);
+  burst(b.wsX, b.wsY, b.splat, 10, 180);
   shake = Math.max(shake, 9);
   if (b.hp <= 0){ b.hp = 0; bossDie(); }
 }
@@ -509,7 +620,7 @@ function bossDie(){
   boss.phase = "dying"; boss.timer = 2.0;
   shake = 22; flash = Math.min(1, flash + 0.5);
   burst(boss.x, boss.y, "#ffd34e", 30, 330);
-  burst(boss.x, boss.y, BOSS_SPLAT[boss.id], 26, 280);
+  burst(boss.x, boss.y, boss.splat, 26, 280);
   ents = ents.filter(e => e.k !== "bshot");
   zoneName = {txt:boss.name+" IS DOWN!", t:3.0};
 }
@@ -549,7 +660,7 @@ function updateBoss(dt){
     if (b.timer <= 0){ b.phase="attack"; b.timer=5.0; b.shootT=0.5; }
   } else if (b.phase === "dying"){
     b.timer -= dt;
-    if (chance(0.6)) burst(b.x+rand(-60,60), b.y+rand(-70,70), chance(0.5)?BOSS_SPLAT[b.id]:"#ffd34e", 6, 220);
+    if (chance(0.6)) burst(b.x+rand(-60,60), b.y+rand(-70,70), chance(0.5)?b.splat:"#ffd34e", 6, 220);
     if (b.timer <= 0){ finishBoss(); }
   }
 }
@@ -613,6 +724,30 @@ const EPITAPHS = {
            "A waterlogged log logged Reginald's final swim."],
   hook:   ["Reginald got hooked. Someone upstream is having fish for dinner.",
            "Line, hook, and sinker. So close to freedom, so very reeled in."],
+  oil:    ["Reginald surfaced into an oil slick. Iridescent, and fatal.",
+           "Slicked. The harbor claims another shiny little soul."],
+  anchor: ["Anchors aweigh — right onto Reginald.\nHe went down with no ship at all.",
+           "A dropped anchor found Reginald first. Heavy is the sea."],
+  jelly:  ["Reginald hugged a jellyfish. The jellyfish did not hug back — it stung.",
+           "Death by a thousand stingers. The reef is pretty and cruel."],
+  urchin: ["Reginald belly-flopped onto a sea urchin. Ouch, times a hundred.",
+           "Pin-cushioned by an urchin. A prickly place to perish."],
+  snow:   ["Lost in the marine snow of the deep. Reginald simply drifted off.",
+           "The abyss is cold and it snows forever. Reginald stopped swimming."],
+  kelp:   ["Tangled in the kelp forever, Reginald became part of the scenery.",
+           "The kelp took hold and never let go. A green and silent end."],
+  net:    ["Reginald swam straight into the trawler's net. Bycatch.",
+           "Caught in the mesh with a thousand strangers. Not the freedom he pictured."],
+  crab:   ["THE KING CRAB pinched Reginald in two. Claws and effect.",
+           "The harbor's crustacean monarch does not share his docks."],
+  octo:   ["THE GIANT OCTOPUS folded Reginald into eight arms of doom.",
+           "Inked, grabbed, and gone. The kelp forest keeps its secrets."],
+  shark:  ["THE GREAT WHITE introduced Reginald to the food chain, personally.",
+           "One bite. That's all it took. The open ocean plays for keeps."],
+  angler: ["Reginald chased the pretty light. The pretty light had teeth.",
+           "THE ANGLERFISH's lure worked perfectly. It always does."],
+  kraken: ["THE KRAKEN dragged Reginald into the trench. So close to the surface.",
+           "Released the Kraken, did you? It released Reginald right back — in pieces."],
 };
 function pickEpitaph(cause){
   const arr = EPITAPHS[cause] || EPITAPHS.clog;
@@ -968,7 +1103,7 @@ function update(dt){
   // passive poison drain — filthy in the sewer, gentle in the clean-ish river
   const poison = z.clean ? 0.75 : (2.0 + z.intensity*2.2);
   player.hp -= poison * DIFF.drain * dt;
-  if (player.hp <= 0){ player.hp=0; die(bossActive && boss ? (boss.id==="clog"?"boss":boss.id) : "drown"); return; }
+  if (player.hp <= 0){ player.hp=0; die(bossActive && boss ? boss.cause : "drown"); return; }
 
   // ---- boss loop, or normal spawns ----
   if (bossActive){
@@ -1016,10 +1151,13 @@ function update(dt){
     } else if (e.k === "mixer"){
       e.x -= curScroll*dt;
       e.ang += e.spd*dt;
-    } else if (e.k === "flake"){
+    } else if (e.k === "flake" || e.k === "snow"){
       e.x -= curScroll*dt;
       e.y += e.vy*dt;
       e.x += Math.sin((runTime+e.sway)*3)*22*dt;   // drifts as it sinks
+    } else if (e.k === "jelly"){
+      e.x -= curScroll*dt;
+      e.y = e.baseY + Math.sin((runTime+e.ph)*1.5)*e.amp;   // gentle pulse-bob
     } else if (e.k === "hair"){
       e.x -= curScroll*dt;
     } else {
@@ -1029,8 +1167,8 @@ function update(dt){
       if (e.k==="corn" && !e.eaten){ e.born += dt; }
       if (e.k==="power"){ e.y += Math.sin((runTime+e.bob)*2)*0.6; }
     }
-    // bound bounce for floaty ones (rocks & logs ricochet off the river walls too)
-    if (e.vy && (e.k==="poop"||e.k==="tp"||e.k==="rock"||e.k==="log")){
+    // bound bounce for floaty ones (rocks/logs/oil/urchins ricochet off the walls)
+    if (e.vy && (e.k==="poop"||e.k==="tp"||e.k==="rock"||e.k==="log"||e.k==="oil"||e.k==="urchin")){
       const br = e.r || e.h || 18;
       if (e.y<br+20){e.y=br+20;e.vy*=-1;} if(e.y>H-br-20){e.y=H-br-20;e.vy*=-1;}
     }
@@ -1066,6 +1204,16 @@ function update(dt){
       if (dist2(px,py,e.x,e.y) < (pr+e.r)**2) hurt(24, e.x, e.y, "hook");
     } else if (e.k==="flake"){
       if (dist2(px,py,e.x,e.y) < (pr+e.r*0.82)**2) hurt(18, e.x, e.y, "chem");
+    } else if (e.k==="snow"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.8)**2) hurt(12, e.x, e.y, "snow");
+    } else if (e.k==="oil"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.85)**2) hurt(e.big?30:20, e.x, e.y, "oil");
+    } else if (e.k==="anchor"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.82)**2) hurt(34, e.x, e.y, "anchor");
+    } else if (e.k==="jelly"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.8)**2) hurt(22, e.x, e.y, "jelly");
+    } else if (e.k==="urchin"){
+      if (dist2(px,py,e.x,e.y) < (pr+e.r*0.9)**2) hurt(e.big?30:22, e.x, e.y, "urchin");
     } else if (e.k==="mixer"){
       // spinning diameter bar: hit if close to the swept segment
       const c=Math.cos(e.ang), s=Math.sin(e.ang);
@@ -1076,22 +1224,23 @@ function update(dt){
       if (dist2(px,py,e.x,e.y) < (pr+rr*0.8)**2){ if(player.iframe<=0&&player.bubble<=0){deathCheck("tp",22);} }
     } else if (e.k==="rat"){
       if (dist2(px,py,e.x,e.y) < (pr+16)**2){ e.bite+=dt; deathCheck("rat",24,e.x,e.y); e.dead=true; }
-    } else if (e.k==="grate" || e.k==="hair"){
+    } else if (e.k==="grate" || e.k==="hair" || e.k==="kelp" || e.k==="net"){
       // wall with a gap: collide if within x-band AND outside the gap
-      const halfW = e.k==="grate"?14:26;
+      const halfW = e.k==="grate"?14 : e.k==="net"?16 : 26;
+      const cause = e.k==="grate"?"grate" : e.k==="net"?"net" : e.k==="kelp"?"kelp" : "clog";
       if (Math.abs((e.x)-px) < halfW+pr){
         const inGap = py > e.gapY - e.gapH/2 + pr*0.5 && py < e.gapY + e.gapH/2 - pr*0.5;
-        if (!inGap){ deathCheck(e.k==="grate"?"grate":"clog", 26, e.x, py); }
+        if (!inGap){ deathCheck(cause, 26, e.x, py); }
       }
     } else if (e.k==="plunger"){
       if (dist2(px,py,e.x,e.y) < (pr+18)**2) hurt(28,e.x,e.y);
     }
   }
 
-  // cull (boss shots die off top/bottom; spent flakes die below the floor)
+  // cull (boss shots die off top/bottom; spent flakes/snow/anchors die below the floor)
   ents = ents.filter(e=> !e.dead && e.x > -80 && e.x < W+300
     && !(e.fired && (e.y<-160||e.y>H+160))
-    && !(e.k==="flake" && e.y>H+50));
+    && !((e.k==="flake"||e.k==="snow"||e.k==="anchor") && e.y>H+60));
 
   // particles
   for (const p of parts){
@@ -1155,6 +1304,15 @@ function draw(){
 
   ctx.restore();
 
+  // deep-sea darkness: a pool of light follows the fish (lifted during boss
+  // fights so the boss and its shots stay readable)
+  if (z.dark && !bossActive && (state===STATE.PLAY || state===STATE.DEAD)){
+    const vg = ctx.createRadialGradient(player.x,player.y,48, player.x,player.y,360);
+    vg.addColorStop(0,"rgba(2,4,12,0)");
+    vg.addColorStop(1,"rgba(2,4,12,0.82)");
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  }
+
   // damage flash
   if (flash>0){ ctx.fillStyle = `rgba(255,40,40,${flash*0.35})`; ctx.fillRect(0,0,W,H); }
 
@@ -1191,9 +1349,9 @@ function drawBackground(z){
   for (let x=-((bgFlow*1)%56); x<W; x+=56){
     ctx.fillRect(x,0,28,22); ctx.fillRect(x+14,H-22,28,22);
   }
-  // ocean glow as you near the end of the river
-  if (z.level===3 && distance > WIN_DISTANCE-400){
-    const a = clamp((distance-(WIN_DISTANCE-400))/400,0,1);
+  // sunlit ocean glow as you near the very end (the open-ocean victory stretch)
+  if (distance > WIN_DISTANCE-360){
+    const a = clamp((distance-(WIN_DISTANCE-360))/360,0,1);
     const og = ctx.createLinearGradient(W*0.6,0,W,0);
     og.addColorStop(0,"rgba(43,179,224,0)");
     og.addColorStop(1,`rgba(120,220,255,${0.5*a})`);
@@ -1241,6 +1399,12 @@ function drawEntity(e, z){
   else if (e.k==="hair"){
     drawWall(e.x,e.gapY,e.gapH,"hair",z);
   }
+  else if (e.k==="kelp"){
+    drawWall(e.x,e.gapY,e.gapH,"kelp",z);
+  }
+  else if (e.k==="net"){
+    drawWall(e.x,e.gapY,e.gapH,"net",z);
+  }
   else if (e.k==="plunger"){
     drawPlunger(e.x,e.y);
   }
@@ -1259,11 +1423,23 @@ function drawEntity(e, z){
   else if (e.k==="hook"){
     drawHook(e.x,e.y,e.r);
   }
-  else if (e.k==="flake"){
+  else if (e.k==="flake" || e.k==="snow"){
     drawFlake(e.x,e.y,e.r,e.hue);
   }
   else if (e.k==="mixer"){
     drawMixer(e.x,e.pivotY,e.len,e.ang);
+  }
+  else if (e.k==="oil"){
+    drawOil(e.x,e.y,e.r);
+  }
+  else if (e.k==="anchor"){
+    drawAnchor(e.x,e.y,e.r);
+  }
+  else if (e.k==="jelly"){
+    drawJelly(e.x,e.y,e.r);
+  }
+  else if (e.k==="urchin"){
+    drawUrchin(e.x,e.y,e.r);
   }
   ctx.restore();
 }
@@ -1320,6 +1496,37 @@ function drawWall(x,gapY,gapH,type,z){
     });
     // gap glow
     ctx.fillStyle="rgba(120,200,255,0.08)";ctx.fillRect(x-12,gTop,24,gapH);
+  } else if (type==="net"){ // fishing net — thin mesh curtain
+    [[top0,gTop],[gBot,bot0]].forEach(([a,b])=>{
+      ctx.fillStyle="rgba(40,55,60,0.32)";ctx.fillRect(x-16,a,32,b-a);
+      ctx.strokeStyle="rgba(210,225,230,0.5)";ctx.lineWidth=1;
+      for(let yy=a; yy<b; yy+=11){ // diamond mesh
+        for(let xx=-16; xx<16; xx+=11){
+          ctx.beginPath();ctx.moveTo(x+xx,yy+5.5);ctx.lineTo(x+xx+5.5,yy);
+          ctx.lineTo(x+xx+11,yy+5.5);ctx.lineTo(x+xx+5.5,yy+11);ctx.closePath();ctx.stroke();
+        }
+      }
+      ctx.fillStyle="#3a4a50";ctx.fillRect(x-16,a,32,3);ctx.fillRect(x-16,b-3,32,3);
+    });
+  } else if (type==="kelp"){ // swaying kelp strands, green
+    [[top0,gTop],[gBot,bot0]].forEach(([a,b])=>{
+      ctx.strokeStyle="#2f6a3a";ctx.lineWidth=6;ctx.lineCap="round";
+      for(let i=0;i<7;i++){
+        const bx=x-18+i*6, ph=i*1.3;
+        ctx.beginPath();ctx.moveTo(bx, a);
+        for(let yy=a; yy<=b; yy+=18){
+          ctx.lineTo(bx+Math.sin(yy*0.03+runTime*1.5+ph)*10, yy);
+        }
+        ctx.stroke();
+      }
+      ctx.strokeStyle="#4c9a52";ctx.lineWidth=2;
+      for(let i=0;i<7;i++){
+        const bx=x-18+i*6, ph=i*1.3;
+        ctx.beginPath();ctx.moveTo(bx, a);
+        for(let yy=a; yy<=b; yy+=18){ ctx.lineTo(bx+Math.sin(yy*0.03+runTime*1.5+ph)*10, yy); }
+        ctx.stroke();
+      }
+    });
   } else { // hair clog
     ctx.strokeStyle="#241a16";ctx.lineWidth=2;ctx.globalAlpha=0.95;
     [[top0,gTop],[gBot,bot0]].forEach(([a,b])=>{
@@ -1412,12 +1619,86 @@ function drawBshot(x,y,r,spin,style){
     ctx.fillStyle="#8a6236";ctx.beginPath();ctx.ellipse(r*1.0,0,r*0.36,r*0.55,0,0,7);ctx.fill();
     ctx.strokeStyle="#4e3018";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-r,0);ctx.lineTo(r*0.7,0);ctx.stroke();
     ctx.fillStyle="#c8a35a";ctx.beginPath();ctx.moveTo(-r*1.15,0);ctx.lineTo(-r*1.7,-r*0.34);ctx.lineTo(-r*1.7,r*0.34);ctx.closePath();ctx.fill();
+  } else if (style==="bubble"){   // crab air-blast bubble
+    const g=ctx.createRadialGradient(-r*0.3,-r*0.3,1,0,0,r);
+    g.addColorStop(0,"rgba(255,255,255,0.9)");g.addColorStop(0.6,"rgba(150,210,255,0.5)");g.addColorStop(1,"rgba(90,170,230,0.35)");
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.strokeStyle="rgba(210,240,255,0.6)";ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,0.85)";ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.22,0,7);ctx.fill();
+  } else if (style==="sting"){     // jellyfish sting blob
+    ctx.fillStyle="rgba(224,122,192,0.85)";ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.fillStyle="rgba(255,190,235,0.7)";ctx.beginPath();ctx.arc(-r*0.25,-r*0.25,r*0.3,0,7);ctx.fill();
+    ctx.strokeStyle="rgba(224,122,192,0.7)";ctx.lineWidth=2;
+    for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo((i-1)*r*0.5,r*0.5);ctx.quadraticCurveTo((i-1)*r*0.5+r*0.2,r*1.3,(i-1)*r*0.5,r*1.6);ctx.stroke();}
+  } else if (style==="ink"){       // octopus / kraken ink blob
+    ctx.fillStyle="#2b2740";ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.fillStyle="rgba(20,18,32,0.9)";
+    for(let i=0;i<4;i++){const a=i/4*7;ctx.beginPath();ctx.arc(Math.cos(a)*r*0.7,Math.sin(a)*r*0.7,r*0.4,0,7);ctx.fill();}
+    ctx.fillStyle="rgba(120,110,160,0.5)";ctx.beginPath();ctx.arc(-r*0.25,-r*0.25,r*0.25,0,7);ctx.fill();
+  } else if (style==="tooth"){     // shark tooth
+    ctx.fillStyle="#eef2f5";ctx.strokeStyle="#c2ccd2";ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(-r,-r*0.8);ctx.quadraticCurveTo(-r*1.2,r*0.9,0,r);ctx.quadraticCurveTo(r*1.2,r*0.9,r,-r*0.8);
+    ctx.quadraticCurveTo(0,-r*0.2,-r,-r*0.8);ctx.closePath();ctx.fill();ctx.stroke();
+  } else if (style==="lure"){      // anglerfish glowing lure
+    ctx.fillStyle="rgba(255,220,120,0.3)";ctx.beginPath();ctx.arc(0,0,r*1.8,0,7);ctx.fill();
+    ctx.fillStyle="#ffe58a";ctx.beginPath();ctx.arc(0,0,r,0,7);ctx.fill();
+    ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(-r*0.25,-r*0.25,r*0.35,0,7);ctx.fill();
   } else {                        // turd pellet
     ctx.fillStyle="#5b3a1e";
     ctx.beginPath();ctx.ellipse(0,0,r,r*0.82,0,0,7);ctx.fill();
     ctx.fillStyle="#6e4a28";ctx.beginPath();ctx.arc(-r*0.3,-r*0.3,r*0.35,0,7);ctx.fill();
     ctx.fillStyle="#3f2814";ctx.beginPath();ctx.arc(r*0.25,r*0.22,r*0.22,0,7);ctx.fill();
   }
+  ctx.restore();
+}
+// ---- ocean-run point hazards ----
+function drawOil(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle="#0d0f14";ctx.beginPath();ctx.ellipse(0,0,r,r*0.82,0,0,7);ctx.fill();
+  ctx.globalAlpha=0.5;ctx.fillStyle="#5a3fa0";ctx.beginPath();ctx.ellipse(-r*0.25,-r*0.2,r*0.5,r*0.3,0.3,0,7);ctx.fill();
+  ctx.fillStyle="#2f7fa0";ctx.beginPath();ctx.ellipse(r*0.25,r*0.15,r*0.4,r*0.24,-0.3,0,7);ctx.fill();
+  ctx.globalAlpha=1;ctx.fillStyle="rgba(255,255,255,0.25)";ctx.beginPath();ctx.ellipse(-r*0.35,-r*0.35,r*0.2,r*0.12,0,0,7);ctx.fill();
+  ctx.restore();
+}
+function drawAnchor(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  ctx.strokeStyle="#8a939c";ctx.fillStyle="#8a939c";ctx.lineWidth=r*0.28;ctx.lineCap="round";
+  ctx.beginPath();ctx.arc(0,-r*0.7,r*0.28,0,7);ctx.stroke();                 // ring
+  ctx.beginPath();ctx.moveTo(0,-r*0.5);ctx.lineTo(0,r*0.8);ctx.stroke();      // shank
+  ctx.beginPath();ctx.moveTo(-r*0.6,-r*0.1);ctx.lineTo(r*0.6,-r*0.1);ctx.stroke(); // stock
+  ctx.lineWidth=r*0.2;                                                        // arms/flukes
+  ctx.beginPath();ctx.moveTo(0,r*0.8);ctx.quadraticCurveTo(-r*0.85,r*0.7,-r*0.7,r*0.1);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,r*0.8);ctx.quadraticCurveTo( r*0.85,r*0.7, r*0.7,r*0.1);ctx.stroke();
+  ctx.fillStyle="#8a939c";
+  ctx.beginPath();ctx.moveTo(-r*0.7,r*0.1);ctx.lineTo(-r*0.95,r*0.0);ctx.lineTo(-r*0.72,r*0.32);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo( r*0.7,r*0.1);ctx.lineTo( r*0.95,r*0.0);ctx.lineTo( r*0.72,r*0.32);ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+function drawJelly(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  const wob=Math.sin(runTime*3+x)*0.12;
+  // tentacles
+  ctx.strokeStyle="rgba(255,150,210,0.6)";ctx.lineWidth=2;
+  for(let i=0;i<5;i++){const tx=(i-2)*r*0.32;
+    ctx.beginPath();ctx.moveTo(tx,r*0.5);
+    ctx.quadraticCurveTo(tx+Math.sin(runTime*4+i)*6,r*1.3,tx+Math.sin(runTime*3+i)*8,r*2.0);ctx.stroke();}
+  // bell
+  const g=ctx.createRadialGradient(0,-r*0.2,2,0,0,r);
+  g.addColorStop(0,"rgba(255,210,240,0.85)");g.addColorStop(1,"rgba(220,120,200,0.55)");
+  ctx.fillStyle=g;
+  ctx.beginPath();ctx.ellipse(0,0,r*(1+wob),r*0.85,0,Math.PI,0,true);
+  ctx.quadraticCurveTo(r*0.5,r*0.5,0,r*0.4);ctx.quadraticCurveTo(-r*0.5,r*0.5,-r,0);ctx.closePath();ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.5)";ctx.beginPath();ctx.ellipse(-r*0.3,-r*0.3,r*0.28,r*0.18,0,0,7);ctx.fill();
+  ctx.restore();
+}
+function drawUrchin(x,y,r){
+  ctx.save();ctx.translate(x,y);
+  ctx.strokeStyle="#2a2440";ctx.lineWidth=2.4;ctx.lineCap="round";
+  for(let i=0;i<14;i++){const a=i/14*Math.PI*2;
+    ctx.beginPath();ctx.moveTo(Math.cos(a)*r*0.6,Math.sin(a)*r*0.6);
+    ctx.lineTo(Math.cos(a)*r*1.35,Math.sin(a)*r*1.35);ctx.stroke();}
+  ctx.fillStyle="#3a3358";ctx.beginPath();ctx.arc(0,0,r*0.7,0,7);ctx.fill();
+  ctx.fillStyle="#524a7a";ctx.beginPath();ctx.arc(-r*0.2,-r*0.2,r*0.28,0,7);ctx.fill();
   ctx.restore();
 }
 // ---- treatment-plant hazards ----
@@ -1455,6 +1736,12 @@ function drawMixer(x,pivotY,len,ang){
 function drawBoss(){
   if (boss.id==="sludge") return drawBossSludge();
   if (boss.id==="beaver") return drawBossBeaver();
+  if (boss.id==="crab")   return drawBossCrab();
+  if (boss.id==="jelly")  return drawBossJelly();
+  if (boss.id==="octo")   return drawBossOcto();
+  if (boss.id==="shark")  return drawBossShark();
+  if (boss.id==="angler") return drawBossAngler();
+  if (boss.id==="kraken") return drawBossKraken();
   return drawBossClog();
 }
 // shared: the glowing corn weak spot (ctx already translated to the boss centre)
@@ -1585,6 +1872,167 @@ function drawBossBeaver(){                         // THE DAM BEAVER — river e
   drawBossWeakSpot(b);
   ctx.restore();
 }
+// shared aura + brow/sweat helpers to keep the new bosses compact
+function bossAura(vuln,R){ if(vuln){ctx.fillStyle="rgba(150,220,90,0.18)";ctx.beginPath();ctx.arc(0,0,R*1.7,0,7);ctx.fill();} }
+function bossBrows(col,eyeY,R){ ctx.strokeStyle=col;ctx.lineWidth=5;ctx.lineCap="round";
+  ctx.beginPath();ctx.moveTo(-R*0.46,eyeY-R*0.26);ctx.lineTo(-R*0.12,eyeY-R*0.08);ctx.stroke();
+  ctx.beginPath();ctx.moveTo( R*0.46,eyeY-R*0.26);ctx.lineTo( R*0.12,eyeY-R*0.08);ctx.stroke(); }
+function bossSweat(R){ ctx.fillStyle="rgba(180,230,255,0.85)";ctx.beginPath();ctx.ellipse(R*0.4,-R*0.3,4,7,0,0,7);ctx.fill(); }
+function bossEyes(eyeY,R){ ctx.fillStyle="#fff";
+  ctx.beginPath();ctx.arc(-R*0.26,eyeY,R*0.16,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.26,eyeY,R*0.16,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";
+  ctx.beginPath();ctx.arc(-R*0.30,eyeY,R*0.08,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.22,eyeY,R*0.08,0,7);ctx.fill(); }
+
+function drawBossCrab(){                            // THE KING CRAB — harbor
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  const base=flash?"#ffffff":(vuln?"#c56a4a":"#c9382a"), hi=vuln?"#d98a6a":"#e35a44";
+  // legs
+  ctx.strokeStyle=flash?"#fff":"#a02a1e";ctx.lineWidth=6;ctx.lineCap="round";
+  for(let s=-1;s<=1;s+=2)for(let i=0;i<3;i++){const ly=R*0.1+i*R*0.35;
+    ctx.beginPath();ctx.moveTo(s*R*0.7,ly);ctx.lineTo(s*R*1.25,ly+R*0.1);ctx.lineTo(s*R*1.45,ly-R*0.15);ctx.stroke();}
+  // claws (raised & open when attacking, low when stunned)
+  const cl = vuln?R*0.1:-R*0.35;
+  ctx.fillStyle=base;
+  for(let s=-1;s<=1;s+=2){ctx.save();ctx.translate(s*R*0.95,-R*0.5+cl);
+    ctx.beginPath();ctx.ellipse(0,0,R*0.42,R*0.3,s*0.4,0,7);ctx.fill();
+    ctx.fillStyle=hi;ctx.beginPath();ctx.moveTo(s*R*0.2,-R*0.1);ctx.lineTo(s*R*0.55,-R*0.28);ctx.lineTo(s*R*0.3,R*0.05);ctx.closePath();ctx.fill();
+    ctx.fillStyle=base;ctx.restore();}
+  // shell
+  ctx.fillStyle=base;ctx.beginPath();ctx.ellipse(0,0,R*0.95,R*0.72,0,0,7);ctx.fill();
+  if(!flash){ctx.fillStyle=hi;ctx.beginPath();ctx.ellipse(-R*0.3,-R*0.25,R*0.3,R*0.16,0,0,7);ctx.fill();}
+  // eye stalks
+  ctx.strokeStyle=base;ctx.lineWidth=5;
+  ctx.beginPath();ctx.moveTo(-R*0.26,-R*0.5);ctx.lineTo(-R*0.26,-R*0.85);ctx.stroke();
+  ctx.beginPath();ctx.moveTo( R*0.26,-R*0.5);ctx.lineTo( R*0.26,-R*0.85);ctx.stroke();
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(-R*0.26,-R*0.9,R*0.12,0,7);ctx.fill();ctx.beginPath();ctx.arc(R*0.26,-R*0.9,R*0.12,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";ctx.beginPath();ctx.arc(-R*0.26,-R*0.9,R*0.06,0,7);ctx.fill();ctx.beginPath();ctx.arc(R*0.26,-R*0.9,R*0.06,0,7);ctx.fill();
+  if(!vuln){ctx.strokeStyle="#7a1e14";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-R*0.2,R*0.2);ctx.lineTo(-R*0.1,R*0.12);ctx.lineTo(0,R*0.2);ctx.lineTo(R*0.1,R*0.12);ctx.lineTo(R*0.2,R*0.2);ctx.stroke();}
+  else { bossSweat(R); ctx.fillStyle="#4a120a";ctx.beginPath();ctx.ellipse(0,R*0.18,R*0.12,R*0.14,0,0,7);ctx.fill(); }
+  drawBossWeakSpot(b);ctx.restore();
+}
+function drawBossJelly(){                           // THE JELLY KING — reef
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  // long royal tentacles
+  ctx.strokeStyle=flash?"#fff":"rgba(255,140,210,0.7)";ctx.lineWidth=4;ctx.lineCap="round";
+  for(let i=0;i<9;i++){const tx=(i-4)*R*0.2;
+    ctx.beginPath();ctx.moveTo(tx,R*0.4);
+    for(let yy=0;yy<=R*1.6;yy+=R*0.3)ctx.lineTo(tx+Math.sin(runTime*3+i+yy*0.02)*10,R*0.4+yy);
+    ctx.stroke();}
+  // bell
+  const g=ctx.createRadialGradient(0,-R*0.2,4,0,0,R);
+  g.addColorStop(0,flash?"#ffffff":"rgba(255,205,240,0.9)");g.addColorStop(1,vuln?"rgba(200,150,220,0.6)":"rgba(224,110,200,0.6)");
+  ctx.fillStyle=g;ctx.beginPath();ctx.ellipse(0,0,R,R*0.85,0,Math.PI,0,true);
+  ctx.quadraticCurveTo(R*0.5,R*0.5,0,R*0.42);ctx.quadraticCurveTo(-R*0.5,R*0.5,-R,0);ctx.closePath();ctx.fill();
+  // little crown
+  ctx.fillStyle="#ffd34e";ctx.beginPath();
+  for(let i=-2;i<=2;i++){ctx.lineTo(i*R*0.22-R*0.11,-R*0.7);ctx.lineTo(i*R*0.22,-R*0.95);}
+  ctx.lineTo(R*0.55,-R*0.55);ctx.lineTo(-R*0.55,-R*0.55);ctx.closePath();ctx.fill();
+  bossEyes(-R*0.15,R);
+  if(!vuln) bossBrows("#a03a80",-R*0.15,R); else bossSweat(R);
+  drawBossWeakSpot(b);ctx.restore();
+}
+function drawBossOcto(){                            // THE GIANT OCTOPUS — kelp
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  const base=flash?"#ffffff":(vuln?"#a05a86":"#8a3a6e");
+  // 8 curling arms
+  ctx.strokeStyle=base;ctx.lineWidth=R*0.22;ctx.lineCap="round";
+  for(let i=0;i<8;i++){const a=Math.PI*0.15+i*Math.PI*0.62/2, dir=(i%2?1:-1);
+    ctx.beginPath();ctx.moveTo(0,R*0.3);
+    ctx.quadraticCurveTo(Math.cos(a)*R*0.9*dir,R*0.6+Math.sin(runTime*2+i)*R*0.2,
+                         Math.cos(a)*R*1.3*dir,R*1.1+Math.sin(runTime*3+i)*R*0.15);ctx.stroke();}
+  // mantle/head
+  ctx.fillStyle=base;ctx.beginPath();ctx.ellipse(0,-R*0.1,R*0.85,R,0,0,7);ctx.fill();
+  if(!flash){ctx.fillStyle=vuln?"#b56e98":"#9a4a7e";ctx.beginPath();ctx.ellipse(-R*0.25,-R*0.4,R*0.28,R*0.4,0,0,7);ctx.fill();}
+  bossEyes(-R*0.1,R);
+  if(!vuln) bossBrows("#5a2048",-R*0.1,R); else bossSweat(R);
+  drawBossWeakSpot(b);ctx.restore();
+}
+function drawBossShark(){                           // THE GREAT WHITE — open ocean
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  const base=flash?"#ffffff":(vuln?"#8f9aa2":"#6b7c88");
+  // dorsal + tail
+  ctx.fillStyle=base;
+  ctx.beginPath();ctx.moveTo(R*0.2,-R*0.9);ctx.lineTo(R*0.55,-R*1.5);ctx.lineTo(R*0.7,-R*0.7);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(R*0.8,0);ctx.lineTo(R*1.5,-R*0.5);ctx.lineTo(R*1.35,0);ctx.lineTo(R*1.5,R*0.5);ctx.closePath();ctx.fill();
+  // body (snout to the left, facing the fish)
+  ctx.beginPath();ctx.moveTo(-R*1.05,0);ctx.quadraticCurveTo(-R*0.2,-R*0.95,R*0.9,-R*0.35);
+  ctx.quadraticCurveTo(R*1.1,0,R*0.9,R*0.35);ctx.quadraticCurveTo(-R*0.2,R*0.95,-R*1.05,0);ctx.closePath();ctx.fill();
+  ctx.fillStyle=flash?"#fff":"#aeb9c2";ctx.beginPath();ctx.moveTo(-R*0.9,R*0.1);ctx.quadraticCurveTo(R*0.2,R*0.7,R*0.85,R*0.15);ctx.quadraticCurveTo(R*0.2,R*0.5,-R*0.9,R*0.1);ctx.closePath();ctx.fill();
+  // gills
+  ctx.strokeStyle="#4a5760";ctx.lineWidth=2;
+  for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(R*0.1+i*R*0.12,-R*0.3);ctx.quadraticCurveTo(R*0.05+i*R*0.12,0,R*0.1+i*R*0.12,R*0.3);ctx.stroke();}
+  // mouth — open & toothy attacking, grimace when stunned
+  ctx.fillStyle="#3a0d12";
+  const m=vuln?R*0.12:R*0.34;
+  ctx.beginPath();ctx.moveTo(-R*1.05,0);ctx.lineTo(-R*0.35,-m*0.5);ctx.lineTo(-R*0.2,0);ctx.lineTo(-R*0.35,m);ctx.closePath();ctx.fill();
+  ctx.fillStyle="#fff";
+  for(let i=0;i<6;i++){const tx=-R*0.98+i*R*0.12;
+    ctx.beginPath();ctx.moveTo(tx,-m*0.34);ctx.lineTo(tx+R*0.05,-m*0.34+R*0.08);ctx.lineTo(tx+R*0.1,-m*0.34);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(tx, m*0.5);ctx.lineTo(tx+R*0.05,m*0.5-R*0.08);ctx.lineTo(tx+R*0.1,m*0.5);ctx.closePath();ctx.fill();}
+  ctx.fillStyle="#10171f";ctx.beginPath();ctx.arc(-R*0.35,-R*0.22,R*0.08,0,7);ctx.fill();
+  if(!vuln){ctx.strokeStyle="#3a4750";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-R*0.55,-R*0.42);ctx.lineTo(-R*0.2,-R*0.28);ctx.stroke();}
+  else bossSweat(R);
+  drawBossWeakSpot(b);ctx.restore();
+}
+function drawBossAngler(){                          // THE ANGLERFISH — midnight zone
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  // glowing lure on a stalk
+  const lx=-R*0.7+Math.sin(runTime*2)*R*0.1, ly=-R*1.05;
+  ctx.strokeStyle=flash?"#fff":"#20323f";ctx.lineWidth=4;
+  ctx.beginPath();ctx.moveTo(-R*0.2,-R*0.6);ctx.quadraticCurveTo(-R*0.7,-R*1.2,lx,ly);ctx.stroke();
+  ctx.fillStyle="rgba(255,230,140,0.35)";ctx.beginPath();ctx.arc(lx,ly,R*0.4,0,7);ctx.fill();
+  ctx.fillStyle="#ffe58a";ctx.beginPath();ctx.arc(lx,ly,R*0.16,0,7);ctx.fill();
+  // round dark body
+  ctx.fillStyle=flash?"#ffffff":(vuln?"#3a4a52":"#1b2830");
+  ctx.beginPath();ctx.ellipse(0,R*0.05,R*0.95,R*0.9,0,0,7);ctx.fill();
+  // huge toothy grin
+  ctx.fillStyle="#0a1216";const m=vuln?R*0.18:R*0.4;
+  ctx.beginPath();ctx.ellipse(-R*0.1,R*0.35,R*0.7,m,0,0,7);ctx.fill();
+  ctx.fillStyle="#eef2f5";
+  for(let i=-3;i<=3;i++){const tx=-R*0.1+i*R*0.18;
+    ctx.beginPath();ctx.moveTo(tx-R*0.05,R*0.35-m*0.7);ctx.lineTo(tx,R*0.35-m*0.2);ctx.lineTo(tx+R*0.05,R*0.35-m*0.7);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(tx-R*0.05,R*0.35+m*0.7);ctx.lineTo(tx,R*0.35+m*0.2);ctx.lineTo(tx+R*0.05,R*0.35+m*0.7);ctx.closePath();ctx.fill();}
+  ctx.fillStyle="#fff";ctx.beginPath();ctx.arc(-R*0.3,-R*0.25,R*0.14,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";ctx.beginPath();ctx.arc(-R*0.3,-R*0.25,R*0.07,0,7);ctx.fill();
+  if(!vuln) ctx.fillStyle="#0a1216"; else bossSweat(R);
+  drawBossWeakSpot(b);ctx.restore();
+}
+function drawBossKraken(){                          // THE KRAKEN — the trench (final)
+  const b=boss,R=b.bodyR,vuln=(b.phase==="vulnerable"),flash=b.hitFlash>0;
+  ctx.save();ctx.translate(b.x,b.y);bossAura(vuln,R);
+  const base=flash?"#ffffff":(vuln?"#6a5a86":"#3f2f5e");
+  // enormous writhing tentacles
+  ctx.strokeStyle=base;ctx.lineWidth=R*0.26;ctx.lineCap="round";
+  for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2, dir=Math.cos(a);
+    ctx.beginPath();ctx.moveTo(0,R*0.2);
+    ctx.quadraticCurveTo(dir*R*1.1,R*0.4+Math.sin(runTime*2+i)*R*0.3,
+                         dir*R*1.7,R*0.9+Math.cos(runTime*2.5+i)*R*0.4);ctx.stroke();}
+  // suckers hint
+  ctx.fillStyle=vuln?"#8a7aa8":"#5a4a7e";
+  for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2,dir=Math.cos(a);
+    ctx.beginPath();ctx.arc(dir*R*1.2,R*0.6,R*0.06,0,7);ctx.fill();}
+  // pointed mantle
+  ctx.fillStyle=base;ctx.beginPath();
+  ctx.moveTo(0,-R*1.25);ctx.quadraticCurveTo(R*0.95,-R*0.2,R*0.7,R*0.5);
+  ctx.quadraticCurveTo(0,R*0.3,-R*0.7,R*0.5);ctx.quadraticCurveTo(-R*0.95,-R*0.2,0,-R*1.25);ctx.closePath();ctx.fill();
+  if(!flash){ctx.fillStyle=vuln?"#7a6a98":"#4f3f6e";ctx.beginPath();ctx.ellipse(-R*0.25,-R*0.5,R*0.24,R*0.5,0,0,7);ctx.fill();}
+  // big menacing eyes
+  ctx.fillStyle="#ffd34e";
+  ctx.beginPath();ctx.arc(-R*0.3,-R*0.25,R*0.2,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc( R*0.3,-R*0.25,R*0.2,0,7);ctx.fill();
+  ctx.fillStyle="#10171f";
+  ctx.beginPath();ctx.ellipse(-R*0.3,-R*0.25,R*0.06,R*0.14,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.ellipse( R*0.3,-R*0.25,R*0.06,R*0.14,0,0,7);ctx.fill();
+  if(!vuln) bossBrows("#1e142e",-R*0.25,R); else bossSweat(R);
+  drawBossWeakSpot(b);ctx.restore();
+}
 
 function drawPower(x,y,r,kind){
   ctx.save();ctx.translate(x,y);
@@ -1702,26 +2150,25 @@ function drawHUD(z){
   }
 
   // distance / progress
-  const LEVELS = {1:["① THE SEWER","#c9a06a"], 2:["② TREATMENT PLANT","#c7d060"], 3:["③ THE RIVER","#7fd6f0"]};
-  const lv = LEVELS[curLevel] || LEVELS[1];
+  const CIRC = ["","①","②","③","④","⑤","⑥","⑦","⑧","⑨","🌊"];
+  const lab = LEVEL_LABEL[curLevel] || {txt:"", col:"#9fb7a3"};
   ctx.textAlign="right";
   ctx.font="bold 18px monospace";ctx.fillStyle="#fff";
   ctx.fillText(Math.floor(distance)+" m",W-16,30);
   ctx.font="12px monospace";ctx.fillStyle="#bcd3c0";
   ctx.fillText("🌽 "+cornEaten,W-16,48);
   ctx.fillStyle="#9fb7a3";ctx.fillText("Lv "+difficulty,W-16,66);
-  ctx.fillStyle=lv[1];ctx.fillText(lv[0],W-16,84);
+  ctx.fillStyle=lab.col;ctx.fillText((CIRC[curLevel]||"")+" "+lab.txt,W-16,84);
 
   // progress bar to ocean, with each level's boss gate marked
   const pw=W-32, pbY=H-14;
   ctx.fillStyle="rgba(0,0,0,0.4)";ctx.fillRect(16,pbY-3,pw,6);
   ctx.fillStyle="#2bb3e0";ctx.fillRect(16,pbY-3,pw*clamp(distance/WIN_DISTANCE,0,1),6);
-  const GATE_ICON = {clog:"💩", sludge:"🍑", beaver:"🦫"};
   for (const g of BOSS_GATES){
     const gmx = 16+pw*(g.at/WIN_DISTANCE), done=bossesDone[g.id];
     ctx.fillStyle=done?"#6a8f4a":"#d8b24a";ctx.fillRect(gmx-1,pbY-6,2,12);
-    ctx.font="11px monospace";ctx.textAlign="center";
-    ctx.fillText(done?"✓":GATE_ICON[g.id],gmx,pbY-8);
+    ctx.font="10px monospace";ctx.textAlign="center";
+    ctx.fillText(done?"✓":GATE_ICON[g.id],gmx,pbY-9);
   }
   ctx.fillStyle="#fff";ctx.font="14px monospace";ctx.textAlign="right";
   ctx.fillText("🌊",16+pw,pbY+1);

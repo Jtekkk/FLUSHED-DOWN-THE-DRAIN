@@ -32,27 +32,29 @@ Soap Bubble — encases you, briefly invincible + faster, but you can't change d
 Hot Sauce Packet — speed burst. High risk, high distance, eats your control window.
 
 Structure & Progression
-Three levels, each an escalating run of zones capped by a boss that dams the
-current until you beat it. Every boss follows the same tell: it looms out of
-reach lobbing attacks (dodge), then clogs up and drifts into range exposing a
-glowing corn weak spot — swim into the corn to damage it.
+NINE levels, each an escalating run of three zones capped by a boss that dams
+the current until you beat it. Every boss follows the same tell: it looms out
+of reach lobbing attacks (dodge), then clogs up and drifts into range exposing
+a glowing corn weak spot — swim into the corn to damage it. Beat the boss to
+descend to the next level. The bosses (and their arenas) get bigger, meaner,
+and deeper the further you go.
 
-LEVEL 1 · THE SEWER
-  The Bowl Drop → Residential Pipes → The Main Line (floaters, TP, grates, rats).
-  BOSS: THE CLOGFATHER — a giant turd that spits poop pellets.
-
-LEVEL 2 · THE TREATMENT PLANT
-  The Settling Tanks → The Aeration Basin → The Clarifier.
-  New hazards: chemical flakes raining down, and spinning mixer arms to time.
-  BOSS: THE BUTT SLUDGE — a sludgy rear that flings green globs.
-
-LEVEL 3 · THE RIVER
-  The River Mouth → Down the River → The Estuary (rocks, logs, fish hooks).
-  Cleaner water, gentler drain — but the river has an engineer.
-  BOSS: THE DAM BEAVER — hurls whittled wooden stakes.
+  1 · THE SEWER          — floaters, TP, grates, rats   → 💩 THE CLOGFATHER (poop pellets)
+  2 · THE TREATMENT PLANT — chemical flakes, mixer arms  → 🍑 THE BUTT SLUDGE (green globs)
+  3 · THE RIVER          — rocks, logs, fish hooks       → 🦫 THE DAM BEAVER (wooden stakes)
+  4 · THE HARBOR         — oil slicks, dropped anchors, boat props → 🦀 THE KING CRAB (bubble blasts)
+  5 · THE CORAL REEF     — jellyfish, sea urchins        → 🪼 THE JELLY KING (stingers)
+  6 · THE KELP FOREST    — swaying kelp walls, urchins   → 🐙 THE GIANT OCTOPUS (ink)
+  7 · THE OPEN OCEAN     — trawler nets, hooks           → 🦈 THE GREAT WHITE (teeth)
+  8 · THE MIDNIGHT ZONE  — marine snow, near-total dark  → 🎣 THE ANGLERFISH (glowing lures)
+  9 · THE TRENCH         — nets, urchins, rocks, the dark → 🦑 THE KRAKEN (ink barrage) — the final boss
 
 OCEAN — win screen. Reginald breaks the surface, gulps clean salt water, freedom,
 and picks his own (frequently ill-advised) happily-ever-after.
+
+Water gets cleaner (gentler health drain) out at sea than in the sewer, but the
+deep two levels go dark — only a pool of light follows Reginald, so hazards loom
+out of the black with little warning (the darkness lifts during boss fights).
 
 Scoring
 
