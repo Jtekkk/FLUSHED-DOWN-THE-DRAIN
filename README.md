@@ -32,14 +32,29 @@ Soap Bubble — encases you, briefly invincible + faster, but you can't change d
 Hot Sauce Packet — speed burst. High risk, high distance, eats your control window.
 
 Structure & Progression
-Run it as escalating zones, each a few seconds long, getting faster and filthier:
+NINE levels, each an escalating run of three zones capped by a boss that dams
+the current until you beat it. Every boss follows the same tell: it looms out
+of reach lobbing attacks (dodge), then clogs up and drifts into range exposing
+a glowing corn weak spot — swim into the corn to damage it. Beat the boss to
+descend to the next level. The bosses (and their arenas) get bigger, meaner,
+and deeper the further you go.
 
-The Bowl Drop — short intro, gentle current.
-Residential Pipes — basic floaters, learn the rhythm.
-The Main Line — everything merges, traffic gets thick, first rats.
-Treatment Plant — the boss-ish gauntlet: churning filters, plunger walls, a final narrow grate.
-The Outflow — light at the end of the pipe. Sprint section. Sky opens up.
-OCEAN — win screen. Reginald breaks the surface, gulps clean salt water, freedom.
+  1 · THE SEWER          — floaters, TP, grates, rats   → 💩 THE CLOGFATHER (poop pellets)
+  2 · THE TREATMENT PLANT — chemical flakes, mixer arms  → 🍑 THE BUTT SLUDGE (green globs)
+  3 · THE RIVER          — rocks, logs, fish hooks       → 🦫 THE DAM BEAVER (wooden stakes)
+  4 · THE HARBOR         — oil slicks, dropped anchors, boat props → 🦀 THE KING CRAB (bubble blasts)
+  5 · THE CORAL REEF     — jellyfish, sea urchins        → 🪼 THE JELLY KING (stingers)
+  6 · THE KELP FOREST    — swaying kelp walls, urchins   → 🐙 THE GIANT OCTOPUS (ink)
+  7 · THE OPEN OCEAN     — trawler nets, hooks           → 🦈 THE GREAT WHITE (teeth)
+  8 · THE MIDNIGHT ZONE  — marine snow, near-total dark  → 🎣 THE ANGLERFISH (glowing lures)
+  9 · THE TRENCH         — nets, urchins, rocks, the dark → 🦑 THE KRAKEN (ink barrage) — the final boss
+
+OCEAN — win screen. Reginald breaks the surface, gulps clean salt water, freedom,
+and picks his own (frequently ill-advised) happily-ever-after.
+
+Water gets cleaner (gentler health drain) out at sea than in the sewer, but the
+deep two levels go dark — only a pool of light follows Reginald, so hazards loom
+out of the black with little warning (the darkness lifts during boss fights).
 
 Scoring
 
