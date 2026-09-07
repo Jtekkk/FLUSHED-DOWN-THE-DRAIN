@@ -85,6 +85,27 @@
       spawnEvery: 0.85,          // seconds between spawn attempts
     },
     {
+      name: "THE TREATMENT PLANT",
+      subtitle: "Churning filters. Plunger walls. One way out.",
+      goal: 1000,
+      scroll: 250,
+      scrollGain: 0.06,
+      drain: 2.6,
+      top: "#4a5a3a", bottom: "#161d12",   // sickly industrial green
+      wall: "#3a3f2e",
+      // the boss gauntlet: mechanical hazards + the staple corn
+      spawns: [
+        { type: "corn",    weight: 20 },  // food (the staple survives even here)
+        { type: "plunger", weight: 18 },  // enemy: thwocks across the channel
+        { type: "filter",  weight: 16 },  // enemy: churning rotary blade
+        { type: "grate",   weight: 16 },  // enemy: drain grate, gap slides
+        { type: "tp",      weight: 8  },  // stray blockage
+        { type: "antacid", weight: 6  },  // power-up
+        { type: "bubble",  weight: 6  },  // power-up
+      ],
+      spawnEvery: 0.7,
+    },
+    {
       name: "THE RIVER",
       subtitle: "Fresh water. Fresh threats.",
       goal: 1100,
@@ -135,7 +156,8 @@
   // How much each food heals and each hazard hurts.
   const HEAL = { corn: 26, mayfly: 16, worm: 22, crumb: 12, shrimp: 20, minnow: 12, kelp: 16 };
   const HURT = { poop: 40, tp: 22, rat: 30, hook: 34, bass: 42, turtle: 26, heron: 45,
-                 crab: 30, jelly: 34, gull: 46, net: 60 };
+                 crab: 30, jelly: 34, gull: 46, net: 60,
+                 plunger: 40, filter: 50, grate: 60 };
 
   const DEATHS = {
     poop:   "Reginald was last seen near the wastewater intake. We'll tell the kids he went to live on a farm.",
@@ -149,6 +171,9 @@
     jelly:  "Stung by a drifting jellyfish. He went out tingling.",
     gull:   "A seagull plucked him clean out of the water. Rude, and airborne.",
     net:    "Tangled in an abandoned net. The saddest way to go, this close to the sea.",
+    plunger:"Thwocked flat by a rogue plunger. He never stood a chance against rubber.",
+    filter: "Fed straight into a churning filter. They're still cleaning the blades.",
+    grate:  "Splatted against a drain grate. Should've lined up with the gap.",
     wall:   "Scraped one wall too many. He was so close. So very close.",
     drown:  "The poison finally won. Should've eaten more corn.",
   };
@@ -342,6 +367,22 @@
         e.kind = "net"; e.gapY = randY(70); e.gapH = 130;
         break;
 
+      // ---- Treatment Plant enemies (NEW) ----
+      case "plunger": // thwocks up and down across the channel on a rhythm
+        e.r = 17; e.kind = "hazard";
+        e.amp = (H - WALL * 2) / 2 - 34; e.speed = 2.2 + Math.random() * 1.6;
+        e.phase = Math.random() * 6;
+        break;
+      case "filter":  // churning rotary blade you swim around
+        e.r = 26; e.kind = "hazard"; e.y = randY(40); e.spin = 0;
+        e.driftBase = e.y; e.driftAmp = 10 + Math.random() * 30;
+        break;
+      case "grate":   // drain grate: full-height bars, gap slides vertically
+        e.kind = "grate"; e.gapH = 120;
+        e.gapBase = randY(70); e.gapAmp = 60 + Math.random() * 30; e.gapPhase = Math.random() * 6;
+        e.gapY = e.gapBase;
+        break;
+
       // ---- Power-up ----
       case "bubble":  e.r = 13; e.kind = "power"; break;
     }
@@ -467,10 +508,19 @@
           else if (e.triggered) e.stab = Math.max(0, e.stab - dt * 1.6);
           e.beakTip = e.stab * e.maxY;
           break;
+        // ---- Treatment Plant movement ----
+        case "plunger": e.y = H / 2 + Math.sin(e.t * e.speed + e.phase) * e.amp; break;
+        case "filter":
+          e.spin += dt * 5;
+          e.y = e.driftBase + Math.sin(e.t * 1.3) * e.driftAmp;
+          break;
+        case "grate":
+          e.gapY = e.gapBase + Math.sin(e.t * 1.6 + e.gapPhase) * e.gapAmp;
+          break;
       }
 
-      // --- Net: full-height mesh, thread the gap ---
-      if (e.type === "net") {
+      // --- Net / grate: full-height barrier, thread the gap ---
+      if (e.type === "net" || e.type === "grate") {
         if (Math.abs(fish.x - e.x) < fish.r + 7) {
           const inGap = fish.y > e.gapY - e.gapH / 2 + fish.r * 0.4 &&
                         fish.y < e.gapY + e.gapH / 2 - fish.r * 0.4;
@@ -479,9 +529,10 @@
               fish.shield = false; e.dead = true;
               popParticles(fish.x, fish.y, "#7fe7ff", 12); shake = Math.max(shake, 8);
             } else {
-              health -= HURT.net; combo = 0; flash = 1; shake = Math.max(shake, 12);
-              e.dead = true; popParticles(fish.x, fish.y, "#9ec98a", 12);
-              if (health <= 0) { die("net"); return; }
+              health -= HURT[e.type]; combo = 0; flash = 1; shake = Math.max(shake, 12);
+              e.dead = true;
+              popParticles(fish.x, fish.y, e.type === "grate" ? "#9aa0a6" : "#9ec98a", 12);
+              if (health <= 0) { die(e.type); return; }
             }
           }
         }
@@ -878,6 +929,60 @@
         ctx.stroke();
         break;
       }
+      // ---- Treatment Plant enemies ----
+      case "plunger": {
+        // wooden handle trailing back, red rubber cup facing left
+        ctx.fillStyle = "#8a5a2b";
+        ctx.fillRect(0, -3, 26, 6); // handle
+        ctx.fillStyle = "#c0392b"; // rubber cup
+        ctx.beginPath();
+        ctx.moveTo(0, -e.r); ctx.quadraticCurveTo(-e.r - 6, 0, 0, e.r);
+        ctx.lineTo(4, e.r * 0.7); ctx.quadraticCurveTo(-e.r + 2, 0, 4, -e.r * 0.7);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#a5281b";
+        ctx.beginPath(); ctx.ellipse(-2, 0, 4, e.r * 0.8, 0, 0, 7); ctx.fill();
+        break;
+      }
+      case "filter": {
+        // churning rotary blade
+        ctx.rotate(e.spin);
+        ctx.fillStyle = "#5b6472";
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.fill();
+        ctx.fillStyle = "#8a94a3";
+        for (let i = 0; i < 4; i++) {
+          ctx.rotate(Math.PI / 2);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(e.r, -6); ctx.lineTo(e.r, 6);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.fillStyle = "#3a4049";
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#2a2f36"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.stroke();
+        break;
+      }
+      case "grate": {
+        // full-height metal grate, gap centred on gapY
+        const gapTop = e.gapY - e.gapH / 2 - e.y;
+        const gapBot = e.gapY + e.gapH / 2 - e.y;
+        ctx.fillStyle = "#6c737b";
+        ctx.fillRect(-6, -e.y, 12, gapTop + e.y);          // top slab
+        ctx.fillRect(-6, gapBot, 12, (H - e.y) - gapBot);  // bottom slab
+        // vertical bars for a grate look
+        ctx.strokeStyle = "#3d434a"; ctx.lineWidth = 2;
+        for (let bx = -4; bx <= 4; bx += 4) {
+          ctx.beginPath();
+          ctx.moveTo(bx, -e.y); ctx.lineTo(bx, gapTop);
+          ctx.moveTo(bx, gapBot); ctx.lineTo(bx, H - e.y);
+          ctx.stroke();
+        }
+        // rounded lips framing the gap
+        ctx.fillStyle = "#8a929b";
+        ctx.beginPath(); ctx.arc(0, gapTop, 6, 0, Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, gapBot, 6, Math.PI, 0); ctx.fill();
+        break;
+      }
       // ---- Power-up: soap bubble ----
       case "bubble": {
         ctx.strokeStyle = `rgba(150,230,255,0.9)`; ctx.lineWidth = 2;
@@ -1016,7 +1121,7 @@
 
     ctx.fillStyle = "#cfd8e0"; ctx.font = "15px sans-serif";
     ctx.fillText("You are Sir Reginald Bubbles III, a freshly flushed goldfish.", W / 2, H / 2 + 2);
-    ctx.fillText("SEWER → RIVER → ESTUARY. Three levels. Reach the ocean.", W / 2, H / 2 + 24);
+    ctx.fillText("SEWER → PLANT → RIVER → ESTUARY. Four levels to the ocean.", W / 2, H / 2 + 24);
     ctx.fillStyle = "#ffd24a"; ctx.font = "13px sans-serif";
     ctx.fillText("Eat food to heal  •  dodge everything else  •  grab bubbles & antacids", W / 2, H / 2 + 50);
 

@@ -59,12 +59,17 @@ Open `index.html` in any browser (desktop or mobile). One button: **tap / hold /
 
 **Level 1 — The Sewer.** The original gauntlet. Eat *corn* to heal; dodge *poop logs*, *TP blobs*, and darting *sewer rats*. Grab an *antacid tablet* for a one-hit fizz shield.
 
-**Level 2 — The River.** Reginald survives the outflow and hits fresh water — cleaner (the health meter drains slower) but full of brand-new threats:
+**Level 2 — The Treatment Plant.** The boss-ish gauntlet: the last man-made obstacle course before you break out into open water. Mechanical, rhythmic, unforgiving:
+
+- **Food:** *corn* still turns up here (of course it does).
+- **New enemies:** *plungers* that thwock up and down across the channel on a rhythm, churning *rotary filters* you have to swim around, and *drain grates* — a full-height wall of bars whose single gap slides as it bears down on you, so you line up mid-swim.
+
+**Level 3 — The River.** Reginald survives the outflow and hits fresh water — cleaner (the health meter drains slower) but full of brand-new threats:
 
 - **New food sources:** *mayflies* (skittering water bugs), *worms* (wriggly, big heal), and *breadcrumbs* (small clusters).
 - **New enemies:** *fishing hooks* dangling and bobbing from the surface, *bass* — a predator fish that swims in fast and actively homes on you, drifting *snapping turtles*, and *herons* that stab their beak straight down when you pass underneath.
 
-**Level 3 — The Estuary.** Brackish water where the river meets the sea. The last stretch before the ocean, and the busiest:
+**Level 4 — The Estuary.** Brackish water where the river meets the sea. The last stretch before the ocean, and the busiest:
 
 - **New food sources:** *shrimp* (solid heal), *minnows* (small, quick), and *kelp* fronds.
 - **New enemies:** *crabs* that scuttle up from the sandy bank to a telegraphed height, drifting *jellyfish* stingers, *seagulls* that dive from the open sky when you swim near, and abandoned *fishing nets* that span the whole channel with a single gap you have to thread.
