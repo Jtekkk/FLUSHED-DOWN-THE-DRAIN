@@ -64,4 +64,16 @@ Open `index.html` in any browser (desktop or mobile). One button: **tap / hold /
 - **New food sources:** *mayflies* (skittering water bugs), *worms* (wriggly, big heal), and *breadcrumbs* (small clusters).
 - **New enemies:** *fishing hooks* dangling and bobbing from the surface, *bass* — a predator fish that swims in fast and actively homes on you, drifting *snapping turtles*, and *herons* that stab their beak straight down when you pass underneath.
 
-Clear the river to break the surface into the **ocean** win screen.
+**Level 3 — The Estuary.** Brackish water where the river meets the sea. The last stretch before the ocean, and the busiest:
+
+- **New food sources:** *shrimp* (solid heal), *minnows* (small, quick), and *kelp* fronds.
+- **New enemies:** *crabs* that scuttle up from the sandy bank to a telegraphed height, drifting *jellyfish* stingers, *seagulls* that dive from the open sky when you swim near, and abandoned *fishing nets* that span the whole channel with a single gap you have to thread.
+
+Clear the estuary to break the surface into the **ocean** win screen.
+
+### Power-ups
+
+- **Antacid Tablet** — a one-hit fizz shield; bounce off the next obstacle without dying.
+- **Soap Bubble** — encases Reginald for a few seconds of full invincibility and a speed burst, but the water rushes past faster and steering gets slippery. High risk, high reward.
+
+Your **best score** is saved locally between runs.

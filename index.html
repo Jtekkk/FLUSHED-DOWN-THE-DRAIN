@@ -80,6 +80,7 @@
         { type: "tp",      weight: 20 },
         { type: "rat",     weight: 14 },
         { type: "antacid", weight: 6  },
+        { type: "bubble",  weight: 4  },  // power-up: soap bubble
       ],
       spawnEvery: 0.85,          // seconds between spawn attempts
     },
@@ -102,14 +103,39 @@
         { type: "turtle",   weight: 10 },  // enemy: floating obstacle
         { type: "heron",    weight: 8  },  // enemy: stabs down from surface
         { type: "antacid",  weight: 4  },  // power-up
+        { type: "bubble",   weight: 4  },  // power-up: soap bubble
       ],
       spawnEvery: 0.8,
+    },
+    {
+      name: "THE ESTUARY",
+      subtitle: "Brackish water. The sea is close.",
+      goal: 1300,
+      scroll: 265,
+      scrollGain: 0.07,
+      drain: 2.0,                // brackish but choppier — the hazards do the work
+      top: "#2f9fa0", bottom: "#0c4a52",
+      wall: "#7a6a44",           // sandy banks
+      // NEW food sources + NEW enemies for the estuary
+      spawns: [
+        { type: "shrimp",  weight: 16 },  // food
+        { type: "minnow",  weight: 14 },  // food
+        { type: "kelp",    weight: 10 },  // food
+        { type: "crab",    weight: 14 },  // enemy: scuttles up from the bank
+        { type: "jelly",   weight: 14 },  // enemy: drifting stinger
+        { type: "gull",    weight: 10 },  // enemy: dives from the open sky
+        { type: "net",     weight: 12 },  // enemy: full-height net, thread the gap
+        { type: "bubble",  weight: 5  },  // power-up: soap bubble
+        { type: "antacid", weight: 5  },  // power-up
+      ],
+      spawnEvery: 0.72,
     },
   ];
 
   // How much each food heals and each hazard hurts.
-  const HEAL = { corn: 26, mayfly: 16, worm: 22, crumb: 12 };
-  const HURT = { poop: 40, tp: 22, rat: 30, hook: 34, bass: 42, turtle: 26, heron: 45 };
+  const HEAL = { corn: 26, mayfly: 16, worm: 22, crumb: 12, shrimp: 20, minnow: 12, kelp: 16 };
+  const HURT = { poop: 40, tp: 22, rat: 30, hook: 34, bass: 42, turtle: 26, heron: 45,
+                 crab: 30, jelly: 34, gull: 46, net: 60 };
 
   const DEATHS = {
     poop:   "Reginald was last seen near the wastewater intake. We'll tell the kids he went to live on a farm.",
@@ -119,6 +145,10 @@
     bass:   "Eaten by a bass roughly forty times his size. The circle of life, but rude.",
     turtle: "Bonked a snapping turtle. The turtle did not care for it.",
     heron:  "Speared by a heron mid-swim. He never even saw the sky.",
+    crab:   "A crab got a claw on him. Pinched at the finish line. Brutal.",
+    jelly:  "Stung by a drifting jellyfish. He went out tingling.",
+    gull:   "A seagull plucked him clean out of the water. Rude, and airborne.",
+    net:    "Tangled in an abandoned net. The saddest way to go, this close to the sea.",
     wall:   "Scraped one wall too many. He was so close. So very close.",
     drown:  "The poison finally won. Should've eaten more corn.",
   };
@@ -132,8 +162,16 @@
   const fish = {
     x: 160, y: H / 2, vy: 0, r: 14,
     tilt: 0, shield: false, shieldT: 0,
+    bubble: false, bubbleT: 0,
     flap: 0,
   };
+
+  // Persistent best score.
+  let best = 0;
+  try { best = parseInt(localStorage.getItem("flushed_best"), 10) || 0; } catch (e) {}
+  function saveBest() {
+    if (score > best) { best = Math.floor(score); try { localStorage.setItem("flushed_best", best); } catch (e) {} }
+  }
 
   let levelIndex = 0;
   let level = LEVELS[0];
@@ -212,6 +250,7 @@
     particles = [];
     spawnTimer = 0;
     fish.y = H / 2; fish.vy = 0; fish.shield = false; fish.shieldT = 0;
+    fish.bubble = false; fish.bubbleT = 0;
     introTimer = 2.2;
     state = STATE.INTRO;
   }
@@ -220,6 +259,7 @@
 
   function die(cause) {
     deathCause = cause;
+    saveBest();
     state = STATE.DEAD;
     shake = 14;
     for (let i = 0; i < 30; i++) {
@@ -281,6 +321,29 @@
         e.r = 12; e.kind = "hazard"; e.x = W * 0.6 + Math.random() * W * 0.3;
         e.stab = 0; e.beakY = WALL; e.triggered = false; e.maxY = randY(60);
         break;
+
+      // ---- Estuary food (NEW) ----
+      case "shrimp":  e.r = 9;  e.kind = "food"; e.baseY = e.y; break;
+      case "minnow":  e.r = 7;  e.kind = "food"; e.baseY = e.y; e.bob = Math.random() * 6; break;
+      case "kelp":    e.r = 9;  e.kind = "food"; e.baseY = e.y; break;
+
+      // ---- Estuary enemies (NEW) ----
+      case "crab":    // rises from the bank floor to a telegraphed height, then holds
+        e.r = 16; e.kind = "hazard"; e.y = H - WALL - e.r; e.target = randY(50);
+        break;
+      case "jelly":   // slow drifting stinger that pulses
+        e.r = 18; e.kind = "hazard"; e.baseY = e.y; e.pulse = Math.random() * 6;
+        break;
+      case "gull":    // dives from the open sky above the bank, then retreats
+        e.r = 12; e.kind = "hazard"; e.x = W * 0.6 + Math.random() * W * 0.3;
+        e.stab = 0; e.triggered = false; e.maxY = randY(70);
+        break;
+      case "net":     // full-height net with one gap you must thread
+        e.kind = "net"; e.gapY = randY(70); e.gapH = 130;
+        break;
+
+      // ---- Power-up ----
+      case "bubble":  e.r = 13; e.kind = "power"; break;
     }
     entities.push(e);
   }
@@ -319,6 +382,7 @@
 
     // --- World speed ramps up with distance ---
     scroll = level.scroll + dist * level.scrollGain * 20;
+    if (fish.bubble) scroll *= 1.45;   // soap bubble: everything rushes past faster
 
     // --- Distance / score ---
     const metres = (scroll * dt) / 12;
@@ -330,7 +394,7 @@
     const GRAV = 900, SWIM = -1500;
     if (held) fish.vy += SWIM * dt;
     fish.vy += GRAV * dt;
-    fish.vy *= 0.9;                 // water drag
+    fish.vy *= fish.bubble ? 0.96 : 0.9;   // bubble = slippery, harder to turn
     fish.vy = Math.max(-360, Math.min(360, fish.vy));
     fish.y += fish.vy * dt;
     fish.tilt = Math.max(-0.5, Math.min(0.6, fish.vy / 500));
@@ -350,8 +414,9 @@
       if (Math.random() < 0.3) flash = Math.max(flash, 0.3);
     }
 
-    // --- Shield timer ---
+    // --- Power-up timers ---
     if (fish.shield) { fish.shieldT -= dt; if (fish.shieldT <= 0) fish.shield = false; }
+    if (fish.bubble) { fish.bubbleT -= dt; if (fish.bubbleT <= 0) fish.bubble = false; }
 
     // --- Spawning ---
     spawnTimer -= dt;
@@ -386,12 +451,48 @@
           else if (e.triggered) e.stab = Math.max(0, e.stab - dt * 1.5);
           e.beakTip = WALL + e.stab * (e.maxY - WALL);
           break;
+        // ---- Estuary movement ----
+        case "shrimp": e.y = e.baseY + Math.sin(e.t * 5) * 6; break;
+        case "minnow": e.y = e.baseY + Math.sin(e.t * 7 + e.bob) * 8; break;
+        case "kelp":   e.y = e.baseY + Math.sin(e.t * 2) * 6; break;
+        case "crab":
+          // scuttle up from the bank floor to the telegraphed height, then hold
+          if (e.y > e.target) e.y = Math.max(e.target, e.y - 55 * dt);
+          break;
+        case "jelly": e.y = e.baseY + Math.sin(e.t * 1.1) * 26; break;
+        case "gull":
+          // dives from the open sky (y=0) down to maxY when the fish is near
+          if (!e.triggered && Math.abs(e.x - fish.x) < 46) e.triggered = true;
+          if (e.triggered && e.stab < 1) e.stab = Math.min(1, e.stab + dt * 4.5);
+          else if (e.triggered) e.stab = Math.max(0, e.stab - dt * 1.6);
+          e.beakTip = e.stab * e.maxY;
+          break;
+      }
+
+      // --- Net: full-height mesh, thread the gap ---
+      if (e.type === "net") {
+        if (Math.abs(fish.x - e.x) < fish.r + 7) {
+          const inGap = fish.y > e.gapY - e.gapH / 2 + fish.r * 0.4 &&
+                        fish.y < e.gapY + e.gapH / 2 - fish.r * 0.4;
+          if (!inGap) {
+            if (fish.bubble || fish.shield) {
+              fish.shield = false; e.dead = true;
+              popParticles(fish.x, fish.y, "#7fe7ff", 12); shake = Math.max(shake, 8);
+            } else {
+              health -= HURT.net; combo = 0; flash = 1; shake = Math.max(shake, 12);
+              e.dead = true; popParticles(fish.x, fish.y, "#9ec98a", 12);
+              if (health <= 0) { die("net"); return; }
+            }
+          }
+        }
+        continue;
       }
 
       // --- Collision (circle vs circle) ---
       let hitY = e.y, hitR = e.r;
       if (e.type === "hook") { hitY = e.topY + (e.len2 || e.len); }
       if (e.type === "heron") { hitY = e.beakTip || WALL; hitR = 10; }
+      if (e.type === "gull") { hitY = e.beakTip || 0; hitR = 10; }
       if (e.type === "tp") hitR = e.r * (0.6 + e.grow * 0.7);
 
       const dx = fish.x - e.x, dy = fish.y - hitY;
@@ -404,10 +505,19 @@
           e.dead = true;
           popParticles(e.x, e.y, "#ffd24a", 8);
         } else if (e.kind === "power") {
-          fish.shield = true; fish.shieldT = 6; e.dead = true;
-          popParticles(e.x, e.y, "#7fe7ff", 10);
+          e.dead = true;
+          if (e.type === "bubble") {
+            fish.bubble = true; fish.bubbleT = 5;      // timed invincibility + speed
+            popParticles(e.x, e.y, "#bff3ff", 12);
+          } else {
+            fish.shield = true; fish.shieldT = 6;       // one-hit fizz shield
+            popParticles(e.x, e.y, "#7fe7ff", 10);
+          }
         } else if (e.kind === "hazard") {
-          if (fish.shield) {
+          if (fish.bubble) {
+            e.dead = true; popParticles(e.x, e.y, "#7fe7ff", 12);
+            shake = Math.max(shake, 8);
+          } else if (fish.shield) {
             fish.shield = false; e.dead = true;
             popParticles(e.x, e.y, "#7fe7ff", 12);
             shake = Math.max(shake, 8);
@@ -432,6 +542,7 @@
       if (levelIndex < LEVELS.length - 1) {
         enterLevel(levelIndex + 1);
       } else {
+        saveBest();
         state = STATE.WIN;
       }
     }
@@ -665,6 +776,118 @@
         ctx.beginPath(); ctx.moveTo(-4, tip - 6); ctx.lineTo(4, tip - 6); ctx.lineTo(0, tip + 8); ctx.closePath(); ctx.fill();
         break;
       }
+      // ---- Estuary food ----
+      case "shrimp": {
+        ctx.fillStyle = "#ff9a8b";
+        ctx.beginPath(); ctx.arc(0, 0, 8, 0.3, Math.PI * 1.7); ctx.lineWidth = 6;
+        ctx.strokeStyle = "#ff9a8b"; ctx.lineCap = "round"; ctx.stroke();
+        ctx.fillStyle = "#ffd0c8"; // tail
+        ctx.beginPath(); ctx.moveTo(7, -5); ctx.lineTo(13, -9); ctx.lineTo(11, -2); ctx.fill();
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(-6, -6, 1.3, 0, 7); ctx.fill();
+        break;
+      }
+      case "minnow": {
+        ctx.fillStyle = "#cdd9e0";
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 4, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#9fb0ba";
+        ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(12, -4); ctx.lineTo(12, 4); ctx.fill();
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(-4, -1, 1.2, 0, 7); ctx.fill();
+        break;
+      }
+      case "kelp": {
+        ctx.strokeStyle = "#3fa66a"; ctx.lineWidth = 4; ctx.lineCap = "round";
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * 5, 8);
+          ctx.quadraticCurveTo(i * 5 + Math.sin(e.t * 2 + i) * 6, 0, i * 5, -9);
+          ctx.stroke();
+        }
+        break;
+      }
+      // ---- Estuary enemies ----
+      case "crab": {
+        ctx.fillStyle = "#d1462f"; // body
+        ctx.beginPath(); ctx.ellipse(0, 0, e.r, e.r * 0.7, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#d1462f"; ctx.lineWidth = 3; ctx.lineCap = "round";
+        for (let i = -1; i <= 1; i += 2) { // legs
+          for (let j = 0; j < 3; j++) {
+            ctx.beginPath();
+            ctx.moveTo(i * e.r * 0.6, 4);
+            ctx.lineTo(i * (e.r + 6), 8 + j * 4 + Math.sin(e.t * 10 + j) * 2);
+            ctx.stroke();
+          }
+        }
+        // claws
+        const cl = Math.sin(e.t * 6) * 0.2;
+        ctx.fillStyle = "#b23a26";
+        ctx.beginPath(); ctx.arc(-e.r - 4, -6, 6, 1 + cl, 5); ctx.fill();
+        ctx.beginPath(); ctx.arc(e.r + 4, -6, 6, -1 - cl, 3); ctx.fill();
+        // eyes
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-4, -8, 3, 0, 7); ctx.arc(4, -8, 3, 0, 7); ctx.fill();
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(-4, -8, 1.4, 0, 7); ctx.arc(4, -8, 1.4, 0, 7); ctx.fill();
+        break;
+      }
+      case "jelly": {
+        const pulse = 1 + Math.sin(e.t * 3 + e.pulse) * 0.12;
+        ctx.fillStyle = "rgba(210,160,255,0.55)";
+        ctx.beginPath(); ctx.arc(0, 0, e.r * pulse, Math.PI, 0); // dome
+        ctx.lineTo(e.r * pulse, 2); ctx.lineTo(-e.r * pulse, 2); ctx.fill();
+        ctx.strokeStyle = "rgba(230,200,255,0.7)"; ctx.lineWidth = 2; ctx.lineCap = "round";
+        for (let i = -2; i <= 2; i++) {
+          ctx.beginPath(); ctx.moveTo(i * 5, 2);
+          ctx.quadraticCurveTo(i * 5 + Math.sin(e.t * 4 + i) * 4, e.r + 4, i * 5, e.r + 14);
+          ctx.stroke();
+        }
+        break;
+      }
+      case "gull": {
+        // dives from the open sky; tip is at e.beakTip (world y), body above it
+        const tip = (e.beakTip || 0) - e.y;
+        ctx.fillStyle = "#f4f6f8"; // body
+        ctx.beginPath(); ctx.ellipse(0, tip - 24, 12, 8, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#e6e9ec"; ctx.lineWidth = 3; // wings
+        ctx.beginPath(); ctx.moveTo(-10, tip - 26); ctx.lineTo(-22, tip - 32);
+        ctx.moveTo(10, tip - 26); ctx.lineTo(22, tip - 32); ctx.stroke();
+        ctx.fillStyle = "#f0a000"; // beak stabbing down
+        ctx.beginPath(); ctx.moveTo(-4, tip - 18); ctx.lineTo(4, tip - 18); ctx.lineTo(0, tip); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(4, tip - 26, 1.5, 0, 7); ctx.fill();
+        break;
+      }
+      case "net": {
+        // full-height mesh with a gap centred on gapY
+        const gapTop = e.gapY - e.gapH / 2 - e.y;
+        const gapBot = e.gapY + e.gapH / 2 - e.y;
+        ctx.strokeStyle = "rgba(180,210,180,0.7)"; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let gy = 0; gy < 2; gy++) {
+          const y0 = gy === 0 ? -e.y : gapBot;
+          const y1 = gy === 0 ? gapTop : H - e.y;
+          for (let yy = y0; yy < y1; yy += 12) {
+            ctx.moveTo(-10, yy); ctx.lineTo(10, yy);
+          }
+          for (let xx = -10; xx <= 10; xx += 10) {
+            ctx.moveTo(xx, y0); ctx.lineTo(xx, y1);
+          }
+        }
+        ctx.stroke();
+        // rope edges framing the gap
+        ctx.strokeStyle = "#8a9a6a"; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -e.y); ctx.lineTo(0, gapTop);
+        ctx.moveTo(0, gapBot); ctx.lineTo(0, H - e.y);
+        ctx.stroke();
+        break;
+      }
+      // ---- Power-up: soap bubble ----
+      case "bubble": {
+        ctx.strokeStyle = `rgba(150,230,255,0.9)`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.stroke();
+        ctx.fillStyle = "rgba(200,245,255,0.25)";
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.beginPath(); ctx.arc(-e.r * 0.35, -e.r * 0.35, e.r * 0.22, 0, 7); ctx.fill();
+        break;
+      }
     }
     ctx.restore();
   }
@@ -686,6 +909,19 @@
       ctx.strokeStyle = `rgba(127,231,255,${0.5 + Math.sin(time * 10) * 0.3})`;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(0, 0, fish.r + 8, 0, 7); ctx.stroke();
+    }
+    if (fish.bubble) {
+      // soap-bubble encasing: translucent sphere with a shimmer, blinks as it expires
+      const blink = fish.bubbleT > 1.2 || Math.sin(time * 20) > 0;
+      if (blink) {
+        ctx.fillStyle = "rgba(190,240,255,0.22)";
+        ctx.beginPath(); ctx.arc(0, 0, fish.r + 12, 0, 7); ctx.fill();
+        ctx.strokeStyle = `rgba(170,235,255,${0.6 + Math.sin(time * 8) * 0.3})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(0, 0, fish.r + 12, 0, 7); ctx.stroke();
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.beginPath(); ctx.arc(-fish.r * 0.5, -fish.r * 0.6, 3, 0, 7); ctx.fill();
+      }
     }
 
     // tail
@@ -754,6 +990,15 @@
       ctx.fillStyle = "#ffd24a"; ctx.font = "bold 13px sans-serif";
       ctx.fillText("CORN COMBO x" + combo, W / 2, 42);
     }
+
+    // active power-up indicator
+    if (fish.bubble) {
+      ctx.fillStyle = "#bff3ff"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "left";
+      ctx.fillText("BUBBLE " + fish.bubbleT.toFixed(1) + "s", 20, 44);
+    } else if (fish.shield) {
+      ctx.fillStyle = "#7fe7ff"; ctx.font = "bold 12px sans-serif"; ctx.textAlign = "left";
+      ctx.fillText("SHIELD READY", 20, 44);
+    }
   }
 
   function panel() {
@@ -771,13 +1016,18 @@
 
     ctx.fillStyle = "#cfd8e0"; ctx.font = "15px sans-serif";
     ctx.fillText("You are Sir Reginald Bubbles III, a freshly flushed goldfish.", W / 2, H / 2 + 2);
-    ctx.fillText("Swim the SEWER, then survive the RIVER. Reach the ocean.", W / 2, H / 2 + 24);
+    ctx.fillText("SEWER → RIVER → ESTUARY. Three levels. Reach the ocean.", W / 2, H / 2 + 24);
     ctx.fillStyle = "#ffd24a"; ctx.font = "13px sans-serif";
-    ctx.fillText("Eat corn / bugs / worms to heal  •  dodge everything else", W / 2, H / 2 + 50);
+    ctx.fillText("Eat food to heal  •  dodge everything else  •  grab bubbles & antacids", W / 2, H / 2 + 50);
+
+    if (best > 0) {
+      ctx.fillStyle = "#9fe0ff"; ctx.font = "bold 13px sans-serif";
+      ctx.fillText("BEST SCORE: " + best, W / 2, H / 2 + 70);
+    }
 
     ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#fff" : "#888";
     ctx.font = "bold 20px sans-serif";
-    ctx.fillText("TAP / SPACE TO SWIM", W / 2, H / 2 + 92);
+    ctx.fillText("TAP / SPACE TO SWIM", W / 2, H / 2 + 100);
   }
 
   function drawIntro() {
@@ -807,10 +1057,12 @@
     ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif";
     ctx.fillText("Distance: " + Math.floor(totalDist) + "m", W / 2, H / 2 + 40);
     ctx.fillText("Score: " + Math.floor(score), W / 2, H / 2 + 66);
+    ctx.fillStyle = "#9fe0ff"; ctx.font = "bold 14px sans-serif";
+    ctx.fillText("Best: " + best, W / 2, H / 2 + 88);
 
     ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#7fe7ff" : "#557";
     ctx.font = "bold 16px sans-serif";
-    ctx.fillText("TAP / SPACE TO TRY AGAIN", W / 2, H / 2 + 104);
+    ctx.fillText("TAP / SPACE TO TRY AGAIN", W / 2, H / 2 + 116);
   }
 
   function drawWin() {
@@ -828,10 +1080,12 @@
 
     ctx.fillStyle = "#0b3550"; ctx.font = "bold 22px sans-serif";
     ctx.fillText("Final Score: " + Math.floor(score), W / 2, H / 2 + 56);
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText("Best: " + best, W / 2, H / 2 + 78);
 
     ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#0b3550" : "#3d6f8f";
     ctx.font = "bold 16px sans-serif";
-    ctx.fillText("TAP / SPACE TO PLAY AGAIN", W / 2, H / 2 + 96);
+    ctx.fillText("TAP / SPACE TO PLAY AGAIN", W / 2, H / 2 + 108);
 
     // draw a happy fish leaping
     const ly = H / 2 + 40 + Math.sin(time * 2) * 6;
