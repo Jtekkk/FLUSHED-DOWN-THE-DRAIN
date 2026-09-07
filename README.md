@@ -50,3 +50,18 @@ Death screen is the gag payoff: "Reginald was last seen near the wastewater inta
 
 Why it works
 One-button means anyone picks it up in two seconds. The corn-for-health mechanic is the joke and the gameplay at the same time, which is the best kind of design — mechanic and theme are the same thing. And "reach the ocean" gives a real finish line so it's not just a soulless endless-runner; there's a win state to chase.
+
+## Play it
+
+Open `index.html` in any browser (desktop or mobile). One button: **tap / hold / SPACE** to swim up, release to sink.
+
+### Levels
+
+**Level 1 — The Sewer.** The original gauntlet. Eat *corn* to heal; dodge *poop logs*, *TP blobs*, and darting *sewer rats*. Grab an *antacid tablet* for a one-hit fizz shield.
+
+**Level 2 — The River.** Reginald survives the outflow and hits fresh water — cleaner (the health meter drains slower) but full of brand-new threats:
+
+- **New food sources:** *mayflies* (skittering water bugs), *worms* (wriggly, big heal), and *breadcrumbs* (small clusters).
+- **New enemies:** *fishing hooks* dangling and bobbing from the surface, *bass* — a predator fish that swims in fast and actively homes on you, drifting *snapping turtles*, and *herons* that stab their beak straight down when you pass underneath.
+
+Clear the river to break the surface into the **ocean** win screen.

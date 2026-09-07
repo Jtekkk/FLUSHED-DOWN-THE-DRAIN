@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>FLUSHED: Down the Drain</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0a0e14;
+    font-family: "Trebuchet MS", system-ui, sans-serif;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #game {
+    display: block;
+    background: #000;
+    max-width: 100%; max-height: 100%;
+    image-rendering: -webkit-optimize-contrast;
+    touch-action: none;
+    box-shadow: 0 0 60px rgba(0,0,0,0.8);
+  }
+  #hint {
+    position: fixed; bottom: 8px; left: 0; right: 0;
+    text-align: center; color: #4a5568; font-size: 12px;
+    pointer-events: none; letter-spacing: 1px;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="800" height="450"></canvas>
+</div>
+<div id="hint">TAP / HOLD / SPACE to swim up &nbsp;•&nbsp; release to sink</div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------------------------------------------------------------------------
+  // Setup
+  // ---------------------------------------------------------------------------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  // Scale canvas to fit the viewport while keeping the 16:9 logical resolution.
+  function resize() {
+    const scale = Math.min(window.innerWidth / W, window.innerHeight / H);
+    canvas.style.width = Math.floor(W * scale) + "px";
+    canvas.style.height = Math.floor(H * scale) + "px";
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ---------------------------------------------------------------------------
+  // Level definitions — this is where each level's food + enemies live.
+  // Level 1: The Sewer (from the README). Level 2: The River (new content).
+  // ---------------------------------------------------------------------------
+  const LEVELS = [
+    {
+      name: "THE SEWER",
+      subtitle: "Don't touch the brown.",
+      goal: 900,                 // meters to clear the level
+      scroll: 200,               // starting world speed (px/s)
+      scrollGain: 0.05,          // speed added per meter travelled
+      drain: 3.2,                // health lost per second to the filthy water
+      // sky/water gradient
+      top: "#3d2b1a", bottom: "#120b06",
+      wall: "#241608",
+      // weighted spawn table: which food/enemies appear and how often
+      spawns: [
+        { type: "corn",    weight: 34 },
+        { type: "poop",    weight: 26 },
+        { type: "tp",      weight: 20 },
+        { type: "rat",     weight: 14 },
+        { type: "antacid", weight: 6  },
+      ],
+      spawnEvery: 0.85,          // seconds between spawn attempts
+    },
+    {
+      name: "THE RIVER",
+      subtitle: "Fresh water. Fresh threats.",
+      goal: 1100,
+      scroll: 235,
+      scrollGain: 0.06,
+      drain: 2.4,                // cleaner water drains slower...
+      top: "#2e7bb0", bottom: "#0b3550",
+      wall: "#123f2a",
+      // NEW food sources + NEW enemies for the river
+      spawns: [
+        { type: "mayfly",   weight: 20 },  // food
+        { type: "worm",     weight: 16 },  // food
+        { type: "crumb",    weight: 12 },  // food
+        { type: "hook",     weight: 16 },  // enemy: fishing hook
+        { type: "bass",     weight: 16 },  // enemy: predator fish (chases)
+        { type: "turtle",   weight: 10 },  // enemy: floating obstacle
+        { type: "heron",    weight: 8  },  // enemy: stabs down from surface
+        { type: "antacid",  weight: 4  },  // power-up
+      ],
+      spawnEvery: 0.8,
+    },
+  ];
+
+  // How much each food heals and each hazard hurts.
+  const HEAL = { corn: 26, mayfly: 16, worm: 22, crumb: 12 };
+  const HURT = { poop: 40, tp: 22, rat: 30, hook: 34, bass: 42, turtle: 26, heron: 45 };
+
+  const DEATHS = {
+    poop:   "Reginald was last seen near the wastewater intake. We'll tell the kids he went to live on a farm.",
+    tp:     "Smothered by a wet paper cloud. Two-ply. The gentle kind. Small mercies.",
+    rat:    "A sewer rat got him. Nature is metal, even down here.",
+    hook:   "Hooked, line and sinker. Somebody's getting a very confused dinner.",
+    bass:   "Eaten by a bass roughly forty times his size. The circle of life, but rude.",
+    turtle: "Bonked a snapping turtle. The turtle did not care for it.",
+    heron:  "Speared by a heron mid-swim. He never even saw the sky.",
+    wall:   "Scraped one wall too many. He was so close. So very close.",
+    drown:  "The poison finally won. Should've eaten more corn.",
+  };
+
+  // ---------------------------------------------------------------------------
+  // Game state
+  // ---------------------------------------------------------------------------
+  const STATE = { MENU: 0, INTRO: 1, PLAY: 2, DEAD: 3, WIN: 4 };
+  let state = STATE.MENU;
+
+  const fish = {
+    x: 160, y: H / 2, vy: 0, r: 14,
+    tilt: 0, shield: false, shieldT: 0,
+    flap: 0,
+  };
+
+  let levelIndex = 0;
+  let level = LEVELS[0];
+  let dist = 0;            // meters travelled in the current level
+  let totalDist = 0;      // meters across the whole run (score)
+  let health = 100;
+  let scroll = 0;         // current world speed
+  let combo = 0;          // corn combo multiplier count
+  let score = 0;
+  let entities = [];
+  let particles = [];
+  let bubbles = [];
+  let spawnTimer = 0;
+  let introTimer = 0;
+  let deathCause = "drown";
+  let flash = 0;          // red damage flash
+  let shake = 0;
+  let held = false;       // is the swim button down
+  let time = 0;
+
+  // Pre-seed some ambient bubbles.
+  function seedBubbles() {
+    bubbles = [];
+    for (let i = 0; i < 40; i++) {
+      bubbles.push({
+        x: Math.random() * W, y: Math.random() * H,
+        r: 1 + Math.random() * 3, sp: 10 + Math.random() * 40,
+      });
+    }
+  }
+  seedBubbles();
+
+  // ---------------------------------------------------------------------------
+  // Input — one button.
+  // ---------------------------------------------------------------------------
+  function press() {
+    if (state === STATE.MENU) { startRun(); return; }
+    if (state === STATE.DEAD || state === STATE.WIN) { resetToMenu(); return; }
+    held = true;
+    if (state === STATE.PLAY) fish.flap = 1;
+  }
+  function release() { held = false; }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+      e.preventDefault();
+      if (!e.repeat) press();
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") release();
+  });
+  canvas.addEventListener("mousedown", (e) => { e.preventDefault(); press(); });
+  window.addEventListener("mouseup", release);
+  canvas.addEventListener("touchstart", (e) => { e.preventDefault(); press(); }, { passive: false });
+  canvas.addEventListener("touchend", (e) => { e.preventDefault(); release(); }, { passive: false });
+
+  // ---------------------------------------------------------------------------
+  // Run lifecycle
+  // ---------------------------------------------------------------------------
+  function startRun() {
+    levelIndex = 0;
+    totalDist = 0;
+    score = 0;
+    enterLevel(0);
+  }
+
+  function enterLevel(i) {
+    levelIndex = i;
+    level = LEVELS[i];
+    dist = 0;
+    health = 100;
+    scroll = level.scroll;
+    combo = 0;
+    entities = [];
+    particles = [];
+    spawnTimer = 0;
+    fish.y = H / 2; fish.vy = 0; fish.shield = false; fish.shieldT = 0;
+    introTimer = 2.2;
+    state = STATE.INTRO;
+  }
+
+  function resetToMenu() { state = STATE.MENU; }
+
+  function die(cause) {
+    deathCause = cause;
+    state = STATE.DEAD;
+    shake = 14;
+    for (let i = 0; i < 30; i++) {
+      particles.push({
+        x: fish.x, y: fish.y,
+        vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260,
+        life: 1, col: "#ff8a3d", r: 2 + Math.random() * 3,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Spawning
+  // ---------------------------------------------------------------------------
+  const WALL = 46; // pipe/bank wall thickness top & bottom
+
+  function pickSpawn() {
+    const table = level.spawns;
+    let total = 0;
+    for (const s of table) total += s.weight;
+    let r = Math.random() * total;
+    for (const s of table) { if ((r -= s.weight) <= 0) return s.type; }
+    return table[0].type;
+  }
+
+  function randY(pad = 30) {
+    return WALL + pad + Math.random() * (H - WALL * 2 - pad * 2);
+  }
+
+  function spawn() {
+    const type = pickSpawn();
+    const e = { type, x: W + 40, y: randY(), r: 14, dead: false, t: 0 };
+
+    switch (type) {
+      // ---- Sewer food + hazards ----
+      case "corn":    e.r = 10; e.kind = "food"; break;
+      case "poop":    e.r = 20; e.kind = "hazard"; e.spin = Math.random() * 6; break;
+      case "tp":      e.r = 16; e.kind = "hazard"; e.grow = 0; break;
+      case "rat":     e.r = 15; e.kind = "hazard"; e.chase = 60; e.y = randY(50); break;
+      case "antacid": e.r = 12; e.kind = "power"; break;
+
+      // ---- River food (NEW) ----
+      case "mayfly":  e.r = 9;  e.kind = "food"; e.baseY = e.y; e.bob = Math.random() * 6; break;
+      case "worm":    e.r = 10; e.kind = "food"; e.baseY = e.y; break;
+      case "crumb":   e.r = 7;  e.kind = "food"; e.baseY = e.y; break;
+
+      // ---- River enemies (NEW) ----
+      case "hook":    // dangles from the surface, bobs up and down
+        e.r = 13; e.kind = "hazard";
+        e.topY = WALL + 4; e.len = 60 + Math.random() * 120; e.bob = Math.random() * 6;
+        break;
+      case "bass":    // predator fish, swims in fast and homes toward the goldfish
+        e.r = 24; e.kind = "hazard"; e.chase = 130; e.speed = 90; e.y = randY(40);
+        break;
+      case "turtle":  // slow floating obstacle, drifts vertically
+        e.r = 22; e.kind = "hazard"; e.baseY = e.y; e.drift = (Math.random() < 0.5 ? -1 : 1) * 18;
+        break;
+      case "heron":   // beak stabs down from the top bank on a trigger line
+        e.r = 12; e.kind = "hazard"; e.x = W * 0.6 + Math.random() * W * 0.3;
+        e.stab = 0; e.beakY = WALL; e.triggered = false; e.maxY = randY(60);
+        break;
+    }
+    entities.push(e);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Update
+  // ---------------------------------------------------------------------------
+  function update(dt) {
+    time += dt;
+
+    // Ambient bubbles drift up always.
+    for (const b of bubbles) {
+      b.y -= b.sp * dt;
+      b.x -= (state === STATE.PLAY ? scroll * 0.15 : 20) * dt;
+      if (b.y < -4 || b.x < -4) { b.x = W + Math.random() * 40; b.y = H + Math.random() * 20; }
+    }
+
+    // Particles.
+    for (const p of particles) {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 200 * dt; p.life -= dt * 1.3;
+    }
+    particles = particles.filter((p) => p.life > 0);
+
+    if (flash > 0) flash -= dt * 2.5;
+    if (shake > 0) shake -= dt * 40;
+
+    if (state === STATE.INTRO) {
+      introTimer -= dt;
+      // gentle idle bob for the fish during the banner
+      fish.y += Math.sin(time * 3) * 0.3;
+      if (introTimer <= 0) state = STATE.PLAY;
+      return;
+    }
+
+    if (state !== STATE.PLAY) return;
+
+    // --- World speed ramps up with distance ---
+    scroll = level.scroll + dist * level.scrollGain * 20;
+
+    // --- Distance / score ---
+    const metres = (scroll * dt) / 12;
+    dist += metres;
+    totalDist += metres;
+    score += metres * (1 + combo * 0.2);
+
+    // --- Fish physics: hold to swim up, gravity sinks ---
+    const GRAV = 900, SWIM = -1500;
+    if (held) fish.vy += SWIM * dt;
+    fish.vy += GRAV * dt;
+    fish.vy *= 0.9;                 // water drag
+    fish.vy = Math.max(-360, Math.min(360, fish.vy));
+    fish.y += fish.vy * dt;
+    fish.tilt = Math.max(-0.5, Math.min(0.6, fish.vy / 500));
+    if (fish.flap > 0) fish.flap -= dt * 4;
+
+    // --- Health drains constantly ---
+    health -= level.drain * dt;
+
+    // --- Wall scrape: chip damage + bounce ---
+    const topLimit = WALL + fish.r, botLimit = H - WALL - fish.r;
+    if (fish.y < topLimit) {
+      fish.y = topLimit; fish.vy = 60; health -= 14 * dt; combo = 0;
+      if (Math.random() < 0.3) flash = Math.max(flash, 0.3);
+    }
+    if (fish.y > botLimit) {
+      fish.y = botLimit; fish.vy = -60; health -= 14 * dt; combo = 0;
+      if (Math.random() < 0.3) flash = Math.max(flash, 0.3);
+    }
+
+    // --- Shield timer ---
+    if (fish.shield) { fish.shieldT -= dt; if (fish.shieldT <= 0) fish.shield = false; }
+
+    // --- Spawning ---
+    spawnTimer -= dt;
+    if (spawnTimer <= 0) { spawn(); spawnTimer = level.spawnEvery * (0.6 + Math.random() * 0.8); }
+
+    // --- Entities ---
+    for (const e of entities) {
+      e.t += dt;
+      e.x -= scroll * dt;
+
+      switch (e.type) {
+        case "tp": e.grow = Math.min(1, e.grow + dt * 0.6); break;
+        case "rat":
+          // darts toward the fish vertically
+          if (e.y < fish.y) e.y += e.chase * dt; else e.y -= e.chase * dt;
+          break;
+        case "mayfly": e.y = e.baseY + Math.sin(e.t * 6 + e.bob) * 6; break;
+        case "worm":   e.y = e.baseY + Math.sin(e.t * 4) * 10; break;
+        case "crumb":  e.y = e.baseY + Math.sin(e.t * 3) * 4; break;
+        case "hook":   e.len2 = e.len + Math.sin(e.t * 2 + e.bob) * 14; break;
+        case "bass":
+          // moves left a touch faster than scroll and homes on the fish
+          e.x -= e.speed * dt;
+          if (e.y < fish.y - 4) e.y += e.chase * dt;
+          else if (e.y > fish.y + 4) e.y -= e.chase * dt;
+          break;
+        case "turtle": e.y = e.baseY + Math.sin(e.t * 1.2) * 24; break;
+        case "heron":
+          // when the fish passes under the beak, it stabs downward, then retracts
+          if (!e.triggered && Math.abs(e.x - fish.x) < 40) e.triggered = true;
+          if (e.triggered && e.stab < 1) e.stab = Math.min(1, e.stab + dt * 3.5);
+          else if (e.triggered) e.stab = Math.max(0, e.stab - dt * 1.5);
+          e.beakTip = WALL + e.stab * (e.maxY - WALL);
+          break;
+      }
+
+      // --- Collision (circle vs circle) ---
+      let hitY = e.y, hitR = e.r;
+      if (e.type === "hook") { hitY = e.topY + (e.len2 || e.len); }
+      if (e.type === "heron") { hitY = e.beakTip || WALL; hitR = 10; }
+      if (e.type === "tp") hitR = e.r * (0.6 + e.grow * 0.7);
+
+      const dx = fish.x - e.x, dy = fish.y - hitY;
+      const hit = dx * dx + dy * dy < (fish.r + hitR) * (fish.r + hitR);
+
+      if (hit && !e.dead) {
+        if (e.kind === "food") {
+          health = Math.min(100, health + (HEAL[e.type] || 15));
+          combo++; score += 25 * combo;
+          e.dead = true;
+          popParticles(e.x, e.y, "#ffd24a", 8);
+        } else if (e.kind === "power") {
+          fish.shield = true; fish.shieldT = 6; e.dead = true;
+          popParticles(e.x, e.y, "#7fe7ff", 10);
+        } else if (e.kind === "hazard") {
+          if (fish.shield) {
+            fish.shield = false; e.dead = true;
+            popParticles(e.x, e.y, "#7fe7ff", 12);
+            shake = Math.max(shake, 8);
+          } else {
+            health -= HURT[e.type] || 25;
+            combo = 0;
+            flash = 1; shake = Math.max(shake, 10);
+            e.dead = true;
+            popParticles(e.x, e.y, "#b5651d", 10);
+            if (health <= 0) { die(e.type); return; }
+          }
+        }
+      }
+    }
+    entities = entities.filter((e) => !e.dead && e.x > -80);
+
+    // --- Death by poison ---
+    if (health <= 0) { die("drown"); return; }
+
+    // --- Level complete? ---
+    if (dist >= level.goal) {
+      if (levelIndex < LEVELS.length - 1) {
+        enterLevel(levelIndex + 1);
+      } else {
+        state = STATE.WIN;
+      }
+    }
+  }
+
+  function popParticles(x, y, col, n) {
+    for (let i = 0; i < n; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 180, vy: (Math.random() - 0.5) * 180,
+        life: 0.6 + Math.random() * 0.4, col, r: 1.5 + Math.random() * 2.5,
+      });
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drawing
+  // ---------------------------------------------------------------------------
+  function draw() {
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+
+    drawWater();
+    drawWalls();
+
+    for (const b of bubbles) {
+      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+    }
+
+    for (const e of entities) drawEntity(e);
+
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.col;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    if (state === STATE.PLAY || state === STATE.INTRO || state === STATE.DEAD) drawFish();
+
+    ctx.restore();
+
+    // Damage flash overlay.
+    if (flash > 0) {
+      ctx.fillStyle = `rgba(200,20,20,${Math.min(0.5, flash * 0.5)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    drawHUD();
+    if (state === STATE.MENU) drawMenu();
+    if (state === STATE.INTRO) drawIntro();
+    if (state === STATE.DEAD) drawDead();
+    if (state === STATE.WIN) drawWin();
+  }
+
+  function drawWater() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, level.top);
+    g.addColorStop(1, level.bottom);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+    // moving current streaks
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 2;
+    const off = (time * scroll * 0.3) % 120;
+    for (let x = -120; x < W + 120; x += 120) {
+      ctx.beginPath();
+      ctx.moveTo(x - off, 0); ctx.lineTo(x - off - 60, H);
+      ctx.stroke();
+    }
+  }
+
+  function drawWalls() {
+    ctx.fillStyle = level.wall;
+    ctx.fillRect(0, 0, W, WALL);
+    ctx.fillRect(0, H - WALL, W, WALL);
+    // grimy texture along the edges
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    const off = (time * scroll * 0.5) % 40;
+    for (let x = -40; x < W + 40; x += 40) {
+      ctx.beginPath();
+      ctx.arc(x - off, WALL, 10, 0, Math.PI); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x - off + 20, H - WALL, 10, Math.PI, 0); ctx.fill();
+    }
+  }
+
+  function drawEntity(e) {
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    switch (e.type) {
+      case "corn": {
+        ctx.translate(0, 0);
+        ctx.fillStyle = "#ffdf5e";
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.ellipse(0, -6 + i * 6, 6, 4, 0, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = "#e8a92c";
+        ctx.beginPath(); ctx.ellipse(0, 0, 7, 11, 0, 0, 7); ctx.stroke();
+        break;
+      }
+      case "poop": {
+        ctx.rotate(Math.sin(e.t + e.spin) * 0.1);
+        ctx.fillStyle = "#5c3a1e";
+        roundedBlob(0, 0, e.r);
+        ctx.fillStyle = "#3e2713";
+        ctx.beginPath(); ctx.arc(-5, -4, 3, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(6, 3, 2.5, 0, 7); ctx.fill();
+        break;
+      }
+      case "tp": {
+        const r = e.r * (0.6 + e.grow * 0.7);
+        ctx.fillStyle = "rgba(235,235,225,0.85)";
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2 + e.t;
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, r * 0.6, 0, 7);
+          ctx.fill();
+        }
+        break;
+      }
+      case "rat": {
+        ctx.fillStyle = "#6b6b73";
+        ctx.beginPath(); ctx.ellipse(0, 0, 15, 10, 0, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(-12, -3, 7, 0, 7); ctx.fill(); // head
+        ctx.fillStyle = "#3a3a40";
+        ctx.beginPath(); ctx.arc(-15, -8, 3, 0, 7); ctx.fill(); // ear
+        ctx.fillStyle = "#ff5b5b";
+        ctx.beginPath(); ctx.arc(-18, -3, 1.6, 0, 7); ctx.fill(); // eye
+        ctx.strokeStyle = "#6b6b73"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(14, 2);
+        ctx.quadraticCurveTo(28, 6 + Math.sin(e.t * 8) * 4, 34, 0); ctx.stroke();
+        break;
+      }
+      case "antacid": {
+        ctx.fillStyle = "#eaf6ff";
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#7fe7ff"; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = "#7fbfd6"; ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("+", 0, 1);
+        // fizz
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc((i - 1) * 5, -e.r - (e.t * 20 % 14), 1.5, 0, 7); ctx.fill();
+        }
+        break;
+      }
+      // ---- River food ----
+      case "mayfly": {
+        ctx.fillStyle = "#d8f0a0";
+        ctx.beginPath(); ctx.ellipse(0, 0, 6, 4, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        const w = Math.sin(e.t * 30) * 3;
+        ctx.beginPath(); ctx.ellipse(-2, -5 + w, 5, 3, -0.5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(2, -5 - w, 5, 3, 0.5, 0, 7); ctx.fill();
+        break;
+      }
+      case "worm": {
+        ctx.strokeStyle = "#e06b8b"; ctx.lineWidth = 5; ctx.lineCap = "round";
+        ctx.beginPath();
+        for (let i = -8; i <= 8; i += 2) {
+          const yy = Math.sin(i * 0.5 + e.t * 5) * 4;
+          if (i === -8) ctx.moveTo(i, yy); else ctx.lineTo(i, yy);
+        }
+        ctx.stroke();
+        break;
+      }
+      case "crumb": {
+        ctx.fillStyle = "#d9a066";
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.arc((i - 1) * 5, Math.sin(i + e.t) * 2, 3.5, 0, 7); ctx.fill();
+        }
+        break;
+      }
+      // ---- River enemies ----
+      case "hook": {
+        const len = e.len2 || e.len;
+        ctx.strokeStyle = "rgba(220,240,255,0.5)"; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(0, e.topY - e.y); ctx.lineTo(0, len - e.y); ctx.stroke();
+        ctx.translate(0, len - e.y);
+        ctx.strokeStyle = "#cfd8e0"; ctx.lineWidth = 3; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, -0.2, Math.PI * 1.1); ctx.stroke();
+        ctx.strokeStyle = "#ff5b5b"; // worm bait
+        ctx.beginPath(); ctx.arc(5, 6, 3, 0, 7); ctx.stroke();
+        break;
+      }
+      case "bass": {
+        ctx.scale(-1, 1); // faces left (toward fish)
+        ctx.fillStyle = "#3f7d4a";
+        ctx.beginPath(); ctx.ellipse(0, 0, 26, 15, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = "#2c5b36";
+        ctx.beginPath(); ctx.moveTo(22, 0); ctx.lineTo(38, -12); ctx.lineTo(38, 12); ctx.closePath(); ctx.fill();
+        // mouth
+        ctx.fillStyle = "#1a1a1a";
+        ctx.beginPath(); ctx.arc(-22, 3, 6, -0.3, 1.6); ctx.fill();
+        // eye
+        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-16, -4, 3.5, 0, 7); ctx.fill();
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(-17, -4, 1.8, 0, 7); ctx.fill();
+        // teeth
+        ctx.fillStyle = "#fff";
+        for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(-24 + i * 3, 0); ctx.lineTo(-23 + i * 3, 5); ctx.lineTo(-22 + i * 3, 0); ctx.fill(); }
+        break;
+      }
+      case "turtle": {
+        ctx.fillStyle = "#4a7c3f"; // flippers/head
+        ctx.beginPath(); ctx.arc(-e.r, 0, 7, 0, 7); ctx.fill();
+        ctx.fillStyle = "#3a5f32"; ctx.beginPath(); ctx.arc(-e.r - 4, -2, 2, 0, 7);
+        ctx.fillStyle = "#000"; ctx.beginPath(); ctx.arc(-e.r - 3, -2, 1.5, 0, 7); ctx.fill();
+        ctx.fillStyle = "#6b4f2a"; // shell
+        ctx.beginPath(); ctx.arc(0, 0, e.r, 0, 7); ctx.fill();
+        ctx.strokeStyle = "#4a3620"; ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * e.r, Math.sin(a) * e.r); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(0, 0, e.r * 0.5, 0, 7); ctx.stroke();
+        break;
+      }
+      case "heron": {
+        // legs/body suggested at the top bank, beak stabs down
+        const tip = (e.beakTip || WALL) - e.y;
+        ctx.strokeStyle = "#d8dde3"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(0, WALL - e.y - 20); ctx.lineTo(0, tip); ctx.stroke();
+        ctx.fillStyle = "#f0a000"; // beak
+        ctx.beginPath(); ctx.moveTo(-4, tip - 6); ctx.lineTo(4, tip - 6); ctx.lineTo(0, tip + 8); ctx.closePath(); ctx.fill();
+        break;
+      }
+    }
+    ctx.restore();
+  }
+
+  function roundedBlob(x, y, r) {
+    ctx.beginPath();
+    ctx.arc(x - r * 0.4, y, r * 0.7, 0, 7);
+    ctx.arc(x + r * 0.4, y, r * 0.7, 0, 7);
+    ctx.arc(x, y - r * 0.3, r * 0.6, 0, 7);
+    ctx.fill();
+  }
+
+  function drawFish() {
+    ctx.save();
+    ctx.translate(fish.x, fish.y);
+    ctx.rotate(fish.tilt);
+
+    if (fish.shield) {
+      ctx.strokeStyle = `rgba(127,231,255,${0.5 + Math.sin(time * 10) * 0.3})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, fish.r + 8, 0, 7); ctx.stroke();
+    }
+
+    // tail
+    const tailWag = Math.sin(time * 18) * (0.3 + fish.flap * 0.4);
+    ctx.fillStyle = "#e8720c";
+    ctx.beginPath();
+    ctx.moveTo(-fish.r + 2, 0);
+    ctx.lineTo(-fish.r - 12, -8 + tailWag * 10);
+    ctx.lineTo(-fish.r - 12, 8 + tailWag * 10);
+    ctx.closePath(); ctx.fill();
+
+    // body
+    ctx.fillStyle = "#ff8a1e";
+    ctx.beginPath(); ctx.ellipse(0, 0, fish.r, fish.r * 0.75, 0, 0, 7); ctx.fill();
+
+    // top fin
+    ctx.fillStyle = "#e8720c";
+    ctx.beginPath();
+    ctx.moveTo(-2, -fish.r * 0.7); ctx.lineTo(6, -fish.r - 4); ctx.lineTo(8, -fish.r * 0.6);
+    ctx.closePath(); ctx.fill();
+
+    // eye
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(fish.r * 0.5, -3, 4.5, 0, 7); ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.beginPath(); ctx.arc(fish.r * 0.55, -3, 2.2, 0, 7); ctx.fill();
+
+    // little frown/gulp
+    ctx.strokeStyle = "#b5560a"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(fish.r * 0.9, 3, 3, 0.2, 2.6); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------------------
+  // HUD + screens
+  // ---------------------------------------------------------------------------
+  function drawHUD() {
+    if (state === STATE.MENU) return;
+
+    // health bar
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(14, 12, 220, 18);
+    const hc = health > 50 ? "#5ad15a" : health > 25 ? "#e8c23c" : "#e84343";
+    ctx.fillStyle = hc;
+    ctx.fillRect(16, 14, Math.max(0, health / 100) * 216, 14);
+    ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 1;
+    ctx.strokeRect(14, 12, 220, 18);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("HEALTH (eat corn!)", 20, 21);
+
+    // level progress
+    const prog = Math.min(1, dist / level.goal);
+    ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(W - 234, 12, 220, 10);
+    ctx.fillStyle = "#7fe7ff"; ctx.fillRect(W - 232, 14, prog * 216, 6);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px sans-serif";
+    ctx.fillText(level.name + "  " + Math.floor(dist) + " / " + level.goal + "m", W - 14, 34);
+
+    // score + combo
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px sans-serif";
+    ctx.fillText("SCORE " + Math.floor(score), W / 2, 24);
+    if (combo > 1) {
+      ctx.fillStyle = "#ffd24a"; ctx.font = "bold 13px sans-serif";
+      ctx.fillText("CORN COMBO x" + combo, W / 2, 42);
+    }
+  }
+
+  function panel() {
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawMenu() {
+    panel();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ff8a1e"; ctx.font = "bold 46px 'Trebuchet MS', sans-serif";
+    ctx.fillText("FLUSHED", W / 2, H / 2 - 70);
+    ctx.fillStyle = "#7fe7ff"; ctx.font = "bold 22px 'Trebuchet MS', sans-serif";
+    ctx.fillText("Down the Drain", W / 2, H / 2 - 40);
+
+    ctx.fillStyle = "#cfd8e0"; ctx.font = "15px sans-serif";
+    ctx.fillText("You are Sir Reginald Bubbles III, a freshly flushed goldfish.", W / 2, H / 2 + 2);
+    ctx.fillText("Swim the SEWER, then survive the RIVER. Reach the ocean.", W / 2, H / 2 + 24);
+    ctx.fillStyle = "#ffd24a"; ctx.font = "13px sans-serif";
+    ctx.fillText("Eat corn / bugs / worms to heal  •  dodge everything else", W / 2, H / 2 + 50);
+
+    ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#fff" : "#888";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("TAP / SPACE TO SWIM", W / 2, H / 2 + 92);
+  }
+
+  function drawIntro() {
+    const a = Math.min(1, introTimer, 2.2 - introTimer + 1.2);
+    ctx.globalAlpha = Math.max(0, Math.min(1, a));
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(0, H / 2 - 70, W, 140);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff"; ctx.font = "bold 40px 'Trebuchet MS', sans-serif";
+    ctx.fillText("LEVEL " + (levelIndex + 1), W / 2, H / 2 - 20);
+    ctx.fillStyle = "#7fe7ff"; ctx.font = "bold 30px 'Trebuchet MS', sans-serif";
+    ctx.fillText(level.name, W / 2, H / 2 + 16);
+    ctx.fillStyle = "#cfd8e0"; ctx.font = "italic 16px sans-serif";
+    ctx.fillText(level.subtitle, W / 2, H / 2 + 44);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawDead() {
+    panel();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#e84343"; ctx.font = "bold 40px 'Trebuchet MS', sans-serif";
+    ctx.fillText("FLUSHED FOR GOOD", W / 2, H / 2 - 60);
+
+    ctx.fillStyle = "#cfd8e0"; ctx.font = "italic 15px sans-serif";
+    wrapText(DEATHS[deathCause] || DEATHS.drown, W / 2, H / 2 - 24, 560, 20);
+
+    ctx.fillStyle = "#fff"; ctx.font = "bold 20px sans-serif";
+    ctx.fillText("Distance: " + Math.floor(totalDist) + "m", W / 2, H / 2 + 40);
+    ctx.fillText("Score: " + Math.floor(score), W / 2, H / 2 + 66);
+
+    ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#7fe7ff" : "#557";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText("TAP / SPACE TO TRY AGAIN", W / 2, H / 2 + 104);
+  }
+
+  function drawWin() {
+    // bright ocean
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#aeeaff"); g.addColorStop(1, "#1b7fb8");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#0b3550"; ctx.font = "bold 44px 'Trebuchet MS', sans-serif";
+    ctx.fillText("THE OCEAN!", W / 2, H / 2 - 50);
+    ctx.fillStyle = "#0b3550"; ctx.font = "18px sans-serif";
+    ctx.fillText("Reginald breaks the surface and gulps clean salt water.", W / 2, H / 2 - 12);
+    ctx.fillText("Freedom. He earned it.", W / 2, H / 2 + 12);
+
+    ctx.fillStyle = "#0b3550"; ctx.font = "bold 22px sans-serif";
+    ctx.fillText("Final Score: " + Math.floor(score), W / 2, H / 2 + 56);
+
+    ctx.fillStyle = (Math.sin(time * 4) > 0) ? "#0b3550" : "#3d6f8f";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText("TAP / SPACE TO PLAY AGAIN", W / 2, H / 2 + 96);
+
+    // draw a happy fish leaping
+    const ly = H / 2 + 40 + Math.sin(time * 2) * 6;
+    ctx.save(); ctx.translate(W / 2 + 220, ly); ctx.scale(1.4, 1.4);
+    fish.tilt = -0.3; fish.shield = false;
+    ctx.rotate(-0.3);
+    ctx.fillStyle = "#ff8a1e";
+    ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = "#e8720c";
+    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-24, -8); ctx.lineTo(-24, 8); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(7, -3, 4, 0, 7); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(8, -3, 2, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function wrapText(text, cx, cy, maxW, lh) {
+    const words = text.split(" ");
+    let line = "", y = cy;
+    for (const w of words) {
+      const test = line + w + " ";
+      if (ctx.measureText(test).width > maxW && line) {
+        ctx.fillText(line.trim(), cx, y); line = w + " "; y += lh;
+      } else line = test;
+    }
+    ctx.fillText(line.trim(), cx, y);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Main loop
+  // ---------------------------------------------------------------------------
+  let last = performance.now();
+  function loop(now) {
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05; // clamp on tab switches
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
